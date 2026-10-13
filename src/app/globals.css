@@ -1,0 +1,124 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * LEADFORGE — Design Tokens
+ * Dark-first. Identidade: azul → violeta → ciano.
+ * O tema claro será derivado na Phase 1 (settings). Por ora, root = dark.
+ */
+@layer base {
+  :root {
+    --background: 224 44% 4%;
+    --foreground: 210 40% 98%;
+    --card: 224 40% 7%;
+    --card-foreground: 210 40% 98%;
+    --popover: 224 42% 6%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 222 40% 12%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 222 36% 12%;
+    --muted-foreground: 218 15% 65%;
+    --accent: 187 92% 53%;
+    --accent-foreground: 224 44% 4%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 222 30% 16%;
+    --input: 222 30% 18%;
+    --ring: 217 91% 60%;
+    --chart-1: 217 91% 60%;
+    --chart-2: 258 90% 66%;
+    --chart-3: 187 92% 53%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 160 84% 39%;
+    --radius: 0.75rem;
+    --sidebar: 224 42% 5%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 222 40% 12%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 222 30% 16%;
+    --sidebar-ring: 217 91% 60%;
+  }
+
+  /* Dark-first: os tokens do root JÁ são dark. O seletor .dark
+     existe para habilitar variantes `dark:` do Tailwind. */
+  .dark {
+    --background: 224 44% 4%;
+    --foreground: 210 40% 98%;
+    --card: 224 40% 7%;
+    --card-foreground: 210 40% 98%;
+    --popover: 224 42% 6%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 222 40% 12%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 222 36% 12%;
+    --muted-foreground: 218 15% 65%;
+    --accent: 187 92% 53%;
+    --accent-foreground: 224 44% 4%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 222 30% 16%;
+    --input: 222 30% 18%;
+    --ring: 217 91% 60%;
+    --chart-1: 217 91% 60%;
+    --chart-2: 258 90% 66%;
+    --chart-3: 187 92% 53%;
+    --chart-4: 38 92% 50%;
+    --chart-5: 160 84% 39%;
+    --sidebar: 224 42% 5%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 217 91% 60%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 222 40% 12%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 222 30% 16%;
+    --sidebar-ring: 217 91% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+@layer utilities {
+  /* Identidade visual LeadForge */
+  .text-gradient {
+    @apply bg-gradient-to-r from-blue-400 via-violet-400 to-cyan-300 bg-clip-text text-transparent;
+  }
+
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(217 91% 60% / 0.06) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(217 91% 60% / 0.06) 1px, transparent 1px);
+    background-size: 44px 44px;
+  }
+
+  .glass {
+    @apply border border-white/10 bg-white/5 backdrop-blur-sm;
+  }
+
+  .animate-fade-in-up {
+    animation: leadforge-fade-in-up 0.6s ease-out both;
+  }
+}
+
+@keyframes leadforge-fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
