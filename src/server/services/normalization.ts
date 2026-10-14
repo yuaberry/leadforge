@@ -30,6 +30,9 @@ export type CompanyInput = {
   state?: string | null;
   country?: string | null;
   externalId?: string | null;
+  /** Campos opcionais de fontes com avaliações (ex.: Google Places). */
+  rating?: number | null;
+  userRatingCount?: number | null;
 };
 
 export type NormalizedCompany = {
@@ -51,6 +54,8 @@ export type NormalizedCompany = {
   country: string | null;
   externalId: string | null;
   nameAddressHash: string | null;
+  rating: number | null;
+  userRatingCount: number | null;
 };
 
 function trimOrNull(value: string | null | undefined): string | null {
@@ -121,6 +126,16 @@ export function normalizeCompany(input: CompanyInput): NormalizedCompany {
     country: trimOrNull(input.country),
     externalId: trimOrNull(input.externalId),
     nameAddressHash: companyNameAddressHash(name, city, state),
+    rating:
+      typeof input.rating === "number" && Number.isFinite(input.rating) && input.rating > 0
+        ? Math.round(input.rating * 10) / 10
+        : null,
+    userRatingCount:
+      typeof input.userRatingCount === "number" &&
+      Number.isInteger(input.userRatingCount) &&
+      input.userRatingCount >= 0
+        ? input.userRatingCount
+        : null,
   };
 }
 

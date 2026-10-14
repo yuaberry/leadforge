@@ -644,4 +644,70 @@ suite("RLS — isolamento entre tenants", () => {
     const report4 = await handleWhatsAppWebhook(db, orgA, statusUpdate);
     expect(report4.statusUpdates).toBe(1);
   });
+
+  it("Phase 8 (gate): discovery cria empresas + leads pontuados e re-busca não duplica", async () => {
+    const { runDiscovery } = await import("@/server/services/discovery");
+    const { getServiceDb } = await import("@/server/db/index");
+    const db = getServiceDb();
+
+    const settings = {
+      orgCategories: ["Saúde"],
+      scoreWeights: {
+        no_website: 25,
+        old_website: 10,
+        social_active: 10,
+        established: 15,
+        many_reviews: 10,
+        contact_available: 5,
+        segment_match: 10,
+        ai_need: 15,
+      },
+    };
+
+    // 1. Primeira busca — mock determinístico (sem GOOGLE_PLACES_API_KEY)
+    const report1 = await runDiscovery(db, {
+      organizationId: orgA,
+      query: { keyword: "clínica odontológica", location: "São Paulo", maxResults: 20 },
+      ...settings,
+    });
+
+    expect(report1.provider).toBe("mock");
+    expect(report1.found).toBe(20);
+    expect(report1.companiesCreated).toBe(20);
+    expect(report1.leadsCreated).toBe(20);
+    expect(report1.opportunitiesWithoutWebsite).toBeGreaterThan(0);
+
+    // leads com score (denormalizado) e com base legal de legítimo interesse
+    const leadsRows = (await service`
+      SELECT score, legal_basis FROM public.leads
+      WHERE organization_id = ${orgA} AND company_id IS NOT NULL
+    `) as unknown as Array<{ score: number | null; legal_basis: string | null }>;
+    expect(leadsRows).toHaveLength(20);
+    expect(leadsRows.every((row) => row.legal_basis === "legitimate_interest")).toBe(true);
+    expect(leadsRows.some((row) => row.score !== null)).toBe(true);
+
+    // empresas com external_id (place_id) para refresh futuro
+    const companiesRows = await service`
+      SELECT count(*)::int AS total FROM public.companies
+      WHERE organization_id = ${orgA} AND external_id IS NOT NULL
+    `;
+    expect(companiesRows[0].total).toBe(20);
+
+    // 2. Re-busca da MESMA query — dedup total: 0 novos
+    const report2 = await runDiscovery(db, {
+      organizationId: orgA,
+      query: { keyword: "clínica odontológica", location: "São Paulo", maxResults: 20 },
+      ...settings,
+    });
+    expect(report2.companiesCreated).toBe(0);
+    expect(report2.companiesUpdated).toBe(20);
+    expect(report2.leadsCreated).toBe(0);
+    expect(report2.leadsExisting).toBe(20);
+
+    const totalLeads = await service`
+      SELECT count(*)::int AS total FROM public.leads
+      WHERE organization_id = ${orgA} AND company_id IS NOT NULL
+    `;
+    expect(totalLeads[0].total).toBe(20);
+  });
 });

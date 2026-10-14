@@ -236,6 +236,9 @@ export const companies = pgTable(
     sourceId: uuid("source_id").references(() => leadSources.id, { onDelete: "set null" }),
     externalId: text("external_id"),
     nameAddressHash: text("name_address_hash"),
+    /** Avaliações públicas (Google Places) — alimentam o sinal many_reviews. */
+    rating: numeric("rating", { precision: 2, scale: 1, mode: "number" }),
+    userRatingCount: integer("user_rating_count"),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .defaultNow()
       .notNull(),

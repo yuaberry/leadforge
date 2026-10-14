@@ -39,6 +39,9 @@ export type ScoreResult = {
 
 export const AI_NEED_THRESHOLD = 60;
 
+/** "Muitas avaliações" — threshold do sinal (spec §9). */
+export const MANY_REVIEWS_THRESHOLD = 100;
+
 export function classify(total: number): ScoreClassification {
   if (total > 80) return "priority";
   if (total > 60) return "hot";
@@ -91,6 +94,7 @@ export function signalsFromLeadData(input: {
     phone: string | null;
     category: string | null;
     externalId: string | null;
+    userRatingCount: number | null;
   } | null;
   contact: {
     email: string | null;
@@ -105,7 +109,7 @@ export function signalsFromLeadData(input: {
 
   return {
     hasWebsite: Boolean(company?.website),
-    // Detecção de "website antigo" exige análise (Phase 8/9); sinal honesto: false.
+    // Detecção de "website antigo" exige análise; sinal honesto: false.
     oldWebsite: false,
     socialActive: Boolean(
       company && (company.instagram || company.facebook || company.linkedin)
@@ -115,7 +119,11 @@ export function signalsFromLeadData(input: {
         (company.city || company.state || company.addressLine) &&
         (company.phone || contact?.email || contact?.phone)
     ),
-    manyReviews: false, // disponível com Google Places (Phase 8)
+    manyReviews: Boolean(
+      company?.userRatingCount !== null &&
+        company?.userRatingCount !== undefined &&
+        company.userRatingCount >= MANY_REVIEWS_THRESHOLD
+    ),
     contactAvailable: Boolean(contact?.email || contact?.phone || company?.phone),
     segmentMatch:
       input.orgCategories.length > 0 &&
@@ -156,6 +164,7 @@ export function signalsFromRawInput(input: {
           phone: input.phone ?? null,
           category: input.category ?? null,
           externalId: null,
+          userRatingCount: null,
         }
       : null,
     contact: { email: input.email ?? null, phone: input.phone ?? null },

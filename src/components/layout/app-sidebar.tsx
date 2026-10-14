@@ -12,6 +12,7 @@ import {
   Magnet,
   MessageCircle,
   Plug,
+  Search,
   Send,
   Target,
   TrendingUp,
@@ -52,6 +53,7 @@ const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: t
     label: "Crescimento",
     items: [
       { href: "/campaigns", label: "Campanhas", icon: Send },
+      { href: "/discovery", label: "Discovery", icon: Search },
       { href: "/integrations", label: "Integrações", icon: Plug },
       { href: "/capture", label: "Captura", icon: Magnet },
       { href: "/import", label: "Importar CSV", icon: Upload },

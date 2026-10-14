@@ -124,6 +124,8 @@ export async function upsertCompany(
       state: existing.state ?? normalized.state,
       country: existing.country ?? normalized.country,
       sourceId: existing.sourceId ?? sourceId,
+      rating: existing.rating ?? normalized.rating,
+      userRatingCount: existing.userRatingCount ?? normalized.userRatingCount,
     };
     const [updated] = await db
       .update(companies)
@@ -234,6 +236,101 @@ export async function upsertContact(
 }
 
 // ---------- Leads (dedup + fluxo central) ----------
+
+/**
+ * Lead B2B por empresa (sem contato nominal) — usado pelo discovery.
+ * Dedup: um lead por empresa (app-level; índice parcial cobre pares com contato).
+ */
+export async function upsertCompanyLead(
+  db: TenantDb,
+  organizationId: string,
+  companyId: string,
+  options: {
+    sourceId: string | null;
+    sourceName: string;
+    orgCategories: string[];
+    scoreWeights: Record<string, number>;
+  }
+): Promise<{ lead: typeof leads.$inferSelect; created: boolean }> {
+  const [existing] = await db
+    .select()
+    .from(leads)
+    .where(
+      and(eq(leads.organizationId, organizationId), eq(leads.companyId, companyId))
+    )
+    .limit(1);
+
+  if (existing) {
+    return { lead: existing, created: false };
+  }
+
+  const [company] = await db
+    .select()
+    .from(companies)
+    .where(eq(companies.id, companyId))
+    .limit(1);
+
+  const [lead] = await db
+    .insert(leads)
+    .values({
+      organizationId,
+      companyId,
+      contactId: null,
+      stage: "new",
+      sourceId: options.sourceId,
+      // Listagem pública de empresa via API oficial — base legal B2B declarada
+      legalBasis: "legitimate_interest",
+      consentStatus: "unknown",
+    })
+    .returning();
+
+  const { computeLeadScore, signalsFromLeadData } = await import(
+    "@/server/services/scoring"
+  );
+  const { saveLeadScore } = await import("@/server/db/repositories/scoring");
+  const score = computeLeadScore(
+    signalsFromLeadData({
+      company: company
+        ? {
+            website: company.website,
+            instagram: company.instagram,
+            facebook: company.facebook,
+            linkedin: company.linkedin,
+            city: company.city,
+            state: company.state,
+            addressLine: company.addressLine,
+            phone: company.phone,
+            category: company.category,
+            externalId: company.externalId,
+            userRatingCount: company.userRatingCount,
+          }
+        : null,
+      contact: null,
+      orgCategories: options.orgCategories,
+      latestAnalysisOpportunityScore: null,
+    }),
+    options.scoreWeights
+  );
+
+  await saveLeadScore(db, {
+    organizationId,
+    leadId: lead.id,
+    total: score.total,
+    classification: score.classification,
+    breakdown: score.breakdown,
+    weightsSnapshot: options.scoreWeights,
+  });
+
+  await recordActivity(db, {
+    organizationId,
+    type: "lead_created",
+    entityType: "lead",
+    entityId: lead.id,
+    metadata: { source: options.sourceName, sourceType: "discovery" },
+  });
+
+  return { lead, created: true };
+}
 
 export type UpsertLeadResult = {
   lead: typeof leads.$inferSelect;

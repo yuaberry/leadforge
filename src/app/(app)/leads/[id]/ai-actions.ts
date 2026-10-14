@@ -134,6 +134,7 @@ export async function analyzeLeadAction(_prev: AIState, formData: FormData): Pro
                 phone: leadRow.company.phone,
                 category: leadRow.company.category,
                 externalId: leadRow.company.externalId,
+                userRatingCount: leadRow.company.userRatingCount,
               }
             : null,
           contact: leadRow.contact
