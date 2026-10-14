@@ -24,7 +24,11 @@ export type OrgSettings = {
   dream: OrgDream | null;
   dreamSkipped: boolean;
   onboardedAt: string | null;
+  scoreWeights: OrgScoreWeights;
 };
+
+/** Pesos de scoring — chaves de ScoreWeightKey com valores 0..100. */
+export type OrgScoreWeights = Record<string, number>;
 
 export const DEFAULT_ORG_SETTINGS: OrgSettings = {
   businessMode: null,
@@ -33,6 +37,7 @@ export const DEFAULT_ORG_SETTINGS: OrgSettings = {
   dream: null,
   dreamSkipped: false,
   onboardedAt: null,
+  scoreWeights: {},
 };
 
 /** Categorias sugeridas no onboarding (o usuário pode escolher qualquer uma). */

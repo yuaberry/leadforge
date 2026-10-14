@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Building2, Globe, Mail, MapPin, Phone, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, Building2, Globe, Lightbulb, Mail, MapPin, Phone, ShieldCheck } from "lucide-react";
 
 import {
   NoteForm,
@@ -9,8 +9,10 @@ import {
   TagChip,
   TagForm,
 } from "@/components/leads/lead-forms";
+import { AnalyzeButton, DraftCard, GenerateMessageForm } from "@/components/leads/ai-panel";
 import { StageBadge } from "@/components/leads/stage-badge";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { requireOrgContext } from "@/server/auth/session";
 import {
@@ -18,7 +20,12 @@ import {
   listLeadActivities,
   listLeadTags,
 } from "@/server/db/repositories/leads";
+import { getLatestAnalysis, listMessageDrafts } from "@/server/db/repositories/scoring";
+import { listProducts } from "@/server/db/repositories/commerce";
 import { withTenantDb } from "@/server/db/tenant";
+import { activeAIProviderKind } from "@/server/providers/ai";
+import { reanalyzeAction } from "./ai-actions";
+import { CLASSIFICATION_LABELS, type ScoreClassification } from "@/validators/scoring";
 
 export const metadata: Metadata = {
   title: "Lead",
@@ -43,20 +50,29 @@ export default async function LeadProfilePage({
   const data = await withTenantDb(ctx.accessToken, async (db) => {
     const lead = await getLeadById(db, ctx.organization.id, id);
     if (!lead) return null;
-    const [tags, activities] = await Promise.all([
+    const [tags, activities, analysis, drafts, productRows] = await Promise.all([
       listLeadTags(db, ctx.organization.id, id),
       listLeadActivities(db, ctx.organization.id, id),
+      getLatestAnalysis(db, ctx.organization.id, id),
+      listMessageDrafts(db, ctx.organization.id, id),
+      listProducts(db, ctx.organization.id),
     ]);
-    return { lead, tags, activities };
+    return { lead, tags, activities, analysis, drafts, products: productRows };
   });
 
   if (!data) {
     notFound();
   }
 
-  const { lead, tags, activities } = data;
+  const { lead, tags, activities, analysis, drafts, products } = data;
   const contact = lead.contact;
   const company = lead.company;
+  const activeProducts = products
+    .filter(({ product }) => product.status === "active")
+    .map(({ product }) => ({ id: product.id, name: product.name }));
+  const recommendedProductName =
+    products.find(({ product }) => product.id === analysis?.recommendedProductId)?.product.name ??
+    null;
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -78,6 +94,20 @@ export default async function LeadProfilePage({
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <StageBadge stage={lead.lead.stage} />
+            {lead.lead.score !== null && (
+              <Badge variant="secondary">
+                Score {lead.lead.score} ·{" "}
+                {CLASSIFICATION_LABELS[
+                  (lead.lead.score > 80
+                    ? "priority"
+                    : lead.lead.score > 60
+                      ? "hot"
+                      : lead.lead.score > 30
+                        ? "warm"
+                        : "cold") as ScoreClassification
+                ]}
+              </Badge>
+            )}
             {lead.sourceName && (
               <Badge variant="secondary">Fonte: {lead.sourceName}</Badge>
             )}
@@ -207,17 +237,131 @@ export default async function LeadProfilePage({
         </Card>
       </div>
 
-      {/* Inteligência (placeholder honesto da Fase 4) */}
-      <Card className="border-dashed">
+      {/* Inteligência — análise com IA */}
+      <Card className="border-violet-500/20 bg-violet-500/[0.03]">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="size-4 text-violet-400" aria-hidden="true" />
+            <Lightbulb className="size-4 text-violet-400" aria-hidden="true" />
             Inteligência com IA
           </CardTitle>
           <CardDescription>
-            Análise do lead, score, recomendação de produto e geração de mensagem chegam na Fase 4.
+            Análise que separa fatos de hipóteses — nada de achismo. Revisão humana antes de
+            qualquer envio.
           </CardDescription>
         </CardHeader>
+        <CardContent className="space-y-5">
+          {!analysis ? (
+            <AnalyzeButton leadId={lead.lead.id} providerKind={activeAIProviderKind()} />
+          ) : (
+            <>
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="lg:col-span-2 space-y-3">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Quem é</p>
+                    <p className="text-sm">{analysis.whoIsThis}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Necessidade provável</p>
+                    <p className="text-sm">{analysis.probableNeed}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Problema comercial</p>
+                    <p className="text-sm">{analysis.commercialProblem}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Oferta sugerida</p>
+                    <p className="text-sm">{analysis.suggestedOffer}</p>
+                    {recommendedProductName && (
+                      <Badge variant="secondary" className="mt-1">
+                        Produto: {recommendedProductName}
+                      </Badge>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Argumento principal</p>
+                    <p className="text-sm">{analysis.argument}</p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-lg border bg-background/50 p-3">
+                      <p className="text-[11px] font-semibold text-emerald-400">FATOS</p>
+                      <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                        {(analysis.facts as string[]).slice(0, 6).map((fact, index) => (
+                          <li key={index}>• {fact}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="rounded-lg border bg-background/50 p-3">
+                      <p className="text-[11px] font-semibold text-blue-400">INFERÊNCIAS</p>
+                      <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                        {(analysis.inferences as string[]).slice(0, 6).map((item, index) => (
+                          <li key={index}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="rounded-lg border bg-background/50 p-3">
+                      <p className="text-[11px] font-semibold text-amber-400">HIPÓTESES</p>
+                      <ul className="mt-1 space-y-1 text-xs text-muted-foreground">
+                        {(analysis.hypotheses as string[]).slice(0, 6).map((item, index) => (
+                          <li key={index}>• {item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col items-center justify-center rounded-xl border border-violet-500/20 bg-violet-500/5 p-6 text-center">
+                  <p className="text-xs text-muted-foreground">Opportunity Score</p>
+                  <p className="text-5xl font-bold text-gradient">
+                    {analysis.opportunityScore ?? "—"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">/100</p>
+                  {analysis.priceRange && (
+                    <p className="mt-3 text-xs text-muted-foreground">{analysis.priceRange}</p>
+                  )}
+                  <p className="mt-3 text-[11px] text-muted-foreground/70">
+                    via {analysis.provider} · {analysis.model}
+                  </p>
+                  <form action={reanalyzeAction} className="mt-4 w-full">
+                    <input type="hidden" name="leadId" value={lead.lead.id} />
+                    <Button type="submit" size="sm" variant="outline" className="w-full">
+                      Reanalisar
+                    </Button>
+                  </form>
+                </div>
+              </div>
+
+              <div className="border-t border-border pt-4">
+                <GenerateMessageForm
+                  leadId={lead.lead.id}
+                  products={activeProducts}
+                  defaultChannel={analysis.channel === "email" ? "email" : "whatsapp"}
+                  defaultProductId={analysis.recommendedProductId}
+                />
+              </div>
+
+              {drafts.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Rascunhos para revisão:
+                  </p>
+                  {drafts.map(({ draft, productName }) => (
+                    <DraftCard
+                      key={draft.id}
+                      draftId={draft.id}
+                      leadId={lead.lead.id}
+                      channel={draft.channel}
+                      tone={draft.tone}
+                      subject={draft.subject}
+                      body={draft.body}
+                      productName={productName}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
       </Card>
 
       {/* Tags */}

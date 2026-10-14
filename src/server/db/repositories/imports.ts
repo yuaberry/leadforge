@@ -118,6 +118,8 @@ export async function runImportChunk(
     organizationId: string;
     userId: string;
     batch: typeof importBatches.$inferSelect;
+    orgCategories?: string[];
+    scoreWeights?: Record<string, number>;
   }
 ): Promise<{ done: boolean; progress: ImportProgress }> {
   const { batch, organizationId, userId } = input;
@@ -197,6 +199,8 @@ export async function runImportChunk(
         actorId: userId,
         legalBasis: batch.legalBasis,
         consentStatus: batch.legalBasis === "consent" ? "granted" : "unknown",
+        orgCategories: input.orgCategories,
+        scoreWeights: input.scoreWeights,
         extraMetadata: { importBatchId: batch.id, filename: batch.filename },
       }
     );

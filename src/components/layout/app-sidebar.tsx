@@ -31,12 +31,12 @@ const ACTIVE_NAV = [
   { href: "/capture", label: "Captura", icon: Magnet },
   { href: "/import", label: "Importar CSV", icon: Upload },
   { href: "/settings/users", label: "Membros", icon: Users },
+  { href: "/settings/ai", label: "IA & Scoring", icon: Sparkles },
   { href: "/settings/organization", label: "Organização", icon: Building2 },
 ];
 
 /** Estados futuros — exibidos honestamente como indisponíveis, com a fase do plano. */
 const COMING_SOON = [
-  { label: "Scoring & IA", phase: "F4", icon: Sparkles },
   { label: "Lucro & Metas", phase: "F5", icon: TrendingUp },
   { label: "Campanhas & E-mail", phase: "F6", icon: Send },
   { label: "WhatsApp & Inbox", phase: "F7", icon: Inbox },

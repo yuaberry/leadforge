@@ -1,13 +1,16 @@
 "use server";
 
+import { eq } from "drizzle-orm";
 import { headers as nextHeaders } from "next/headers";
 
 import { getServiceDb } from "@/server/db/index";
+import { organizations } from "@/server/db/schema";
 import {
   getOrCreateSource,
   recordActivity,
   upsertLead,
 } from "@/server/db/repositories/leads";
+import { parseOrgSettings } from "@/validators/org";
 import {
   getPublishedPageBySlug,
   recordCaptureSubmission,
@@ -80,6 +83,14 @@ export async function submitCaptureFormAction(
       "capture"
     );
 
+    // settings da org (categorias/pesos para o score de nascimento)
+    const [orgRow] = await db
+      .select({ settings: organizations.settings })
+      .from(organizations)
+      .where(eq(organizations.id, page.organizationId))
+      .limit(1);
+    const settings = parseOrgSettings(orgRow?.settings);
+
     const { lead, created } = await upsertLead(
       db,
       page.organizationId,
@@ -95,6 +106,8 @@ export async function submitCaptureFormAction(
         sourceType: "capture",
         legalBasis: "consent",
         consentStatus: "granted",
+        orgCategories: settings.categories,
+        scoreWeights: settings.scoreWeights,
         extraMetadata: {
           capturePageId: page.id,
           utm: {

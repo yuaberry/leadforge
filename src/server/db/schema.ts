@@ -706,6 +706,100 @@ export const sales = pgTable(
   ]
 );
 
+// ---------- Phase 4: Scoring, IA e rascunhos ----------
+
+/** Histórico de pontuação — a última execução é o score vigente. */
+export const leadScores = pgTable(
+  "lead_scores",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    total: integer("total").notNull(),
+    classification: text("classification").notNull(),
+    breakdown: jsonb("breakdown").default([]).notNull(),
+    weightsSnapshot: jsonb("weights_snapshot").default({}).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("lead_scores_lead_idx").on(table.leadId, table.createdAt),
+    index("lead_scores_org_idx").on(table.organizationId),
+  ]
+);
+
+/** Análises do AI Sales Assistant — fatos/inferências/hipóteses separados. */
+export const leadAnalyses = pgTable(
+  "lead_analyses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    status: text("status").notNull().default("completed"),
+    whoIsThis: text("who_is_this"),
+    probableNeed: text("probable_need"),
+    commercialProblem: text("commercial_problem"),
+    recommendedProductId: uuid("recommended_product_id").references(() => products.id, {
+      onDelete: "set null",
+    }),
+    opportunityScore: integer("opportunity_score"),
+    suggestedOffer: text("suggested_offer"),
+    priceRange: text("price_range"),
+    argument: text("argument"),
+    channel: text("channel"),
+    facts: jsonb("facts").default([]).notNull(),
+    inferences: jsonb("inferences").default([]).notNull(),
+    hypotheses: jsonb("hypotheses").default([]).notNull(),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("lead_analyses_lead_idx").on(table.leadId, table.createdAt),
+    index("lead_analyses_org_idx").on(table.organizationId),
+  ]
+);
+
+/** Rascunhos gerados pela IA — revisão humana antes de qualquer envio. */
+export const messageDrafts = pgTable(
+  "message_drafts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    analysisId: uuid("analysis_id").references(() => leadAnalyses.id, { onDelete: "set null" }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    channel: text("channel").notNull(),
+    tone: text("tone").notNull(),
+    subject: text("subject"),
+    body: text("body").notNull(),
+    status: text("status").default("draft").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("message_drafts_lead_idx").on(table.leadId, table.createdAt),
+    index("message_drafts_org_idx").on(table.organizationId),
+  ]
+);
+
 // ---------- Relations (joins tipados) ----------
 
 export const organizationMembersRelations = relations(organizationMembers, ({ one }) => ({

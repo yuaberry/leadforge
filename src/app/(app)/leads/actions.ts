@@ -15,6 +15,7 @@ import {
   updateLeadStage,
   upsertLead,
 } from "@/server/db/repositories/leads";
+import { parseOrgSettings } from "@/validators/org";
 import {
   addLeadNoteSchema,
   addLeadTagSchema,
@@ -54,6 +55,7 @@ export async function createLeadAction(
   let leadId: string | null = null;
 
   try {
+    const settings = parseOrgSettings(ctx.organization.settings);
     const result = await withTenantDb(ctx.accessToken, async (db) => {
       const source = await getOrCreateSource(
         db,
@@ -70,6 +72,8 @@ export async function createLeadAction(
           sourceName: "Cadastro manual",
           sourceType: "manual",
           actorId: ctx.user.id,
+          orgCategories: settings.categories,
+          scoreWeights: settings.scoreWeights,
         }
       );
       return { leadId: lead.id, created };

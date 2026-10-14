@@ -14,6 +14,7 @@ import {
 } from "@/server/db/repositories/imports";
 import { guessMapping, IMPORT_LIMITS, parseCsv, type ImportMapping } from "@/server/services/csv";
 import { createImportBatchSchema, importMappingSchema } from "@/validators/import";
+import { parseOrgSettings } from "@/validators/org";
 
 type ImportState = { error?: string } | null;
 
@@ -162,6 +163,8 @@ export async function runImportChunkAction(batchId: string): Promise<ChunkResult
         organizationId: ctx.organization.id,
         userId: ctx.user.id,
         batch,
+        orgCategories: parseOrgSettings(ctx.organization.settings).categories,
+        scoreWeights: parseOrgSettings(ctx.organization.settings).scoreWeights,
       });
 
       return { ok: true as const, done, progress };

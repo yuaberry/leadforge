@@ -3,6 +3,8 @@ import "server-only";
 import { and, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 
 import { companyDedupKeys, normalizeCompany, normalizeContact, type NormalizedCompany } from "@/server/services/normalization";
+import { computeLeadScore, signalsFromRawInput } from "@/server/services/scoring";
+import { DEFAULT_SCORE_WEIGHTS } from "@/validators/scoring";
 import type { LeadStage } from "@/validators/lead";
 import {
   activities,
@@ -14,6 +16,7 @@ import {
   tags,
 } from "@/server/db/schema";
 import type { TenantDb } from "@/server/db/tenant";
+import { saveLeadScore } from "@/server/db/repositories/scoring";
 
 // ---------- Activities ----------
 
@@ -269,6 +272,10 @@ export async function upsertLead(
     legalBasis?: "consent" | "legitimate_interest" | "contract" | "other" | null;
     consentStatus?: "unknown" | "granted" | "refused";
     extraMetadata?: Record<string, unknown>;
+    /** Categorias do negócio da org — alimentam o sinal segment_match. */
+    orgCategories?: string[];
+    /** Pesos de scoring configurados (defaults da spec se ausentes). */
+    scoreWeights?: Record<string, number>;
   }
 ): Promise<UpsertLeadResult> {
   const hasCompany = Boolean(input.companyName && input.companyName.trim());
@@ -330,6 +337,30 @@ export async function upsertLead(
       notes: input.notes ?? null,
     })
     .returning();
+
+  // Score de nascimento — determinístico e auditável (histórico em lead_scores)
+  const score = computeLeadScore(
+    signalsFromRawInput({
+      companyName: input.companyName ?? null,
+      website: input.website ?? null,
+      category: input.category ?? null,
+      city: input.city ?? null,
+      state: input.state ?? null,
+      email: input.email ?? null,
+      phone: input.phone ?? null,
+      orgCategories: options.orgCategories,
+    }),
+    options.scoreWeights ?? DEFAULT_SCORE_WEIGHTS
+  );
+
+  await saveLeadScore(db, {
+    organizationId,
+    leadId: lead.id,
+    total: score.total,
+    classification: score.classification,
+    breakdown: score.breakdown,
+    weightsSnapshot: options.scoreWeights ?? DEFAULT_SCORE_WEIGHTS,
+  });
 
   await recordActivity(db, {
     organizationId,

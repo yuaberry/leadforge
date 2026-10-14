@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { DEFAULT_ORG_SETTINGS, type OrgSettings } from "@/types/org";
+import { DEFAULT_SCORE_WEIGHTS, SCORE_WEIGHT_KEYS } from "@/validators/scoring";
 
 // ---------- Organization ----------
 
@@ -29,14 +30,33 @@ export const orgSettingsSchema = z.object({
     .nullable(),
   dreamSkipped: z.boolean(),
   onboardedAt: z.string().datetime().nullable(),
+  scoreWeights: z.record(z.string(), z.number()).default({}),
 });
+
+/** Mescla pesos salvos com os defaults (chaves novas sempre têm valor). */
+export function parseScoreWeights(raw: unknown): Record<string, number> {
+  const weights: Record<string, number> = { ...DEFAULT_SCORE_WEIGHTS };
+  if (typeof raw === "object" && raw !== null) {
+    for (const key of SCORE_WEIGHT_KEYS) {
+      const value = (raw as Record<string, unknown>)[key];
+      if (typeof value === "number" && Number.isFinite(value)) {
+        weights[key] = Math.max(0, Math.min(100, Math.round(value)));
+      }
+    }
+  }
+  return weights;
+}
 
 export function parseOrgSettings(raw: unknown): OrgSettings {
   const parsed = orgSettingsSchema.safeParse(raw);
   if (parsed.success) {
-    return parsed.data as OrgSettings;
+    return {
+      ...parsed.data,
+      dream: parsed.data.dream as OrgSettings["dream"],
+      scoreWeights: parseScoreWeights(parsed.data.scoreWeights),
+    } as OrgSettings;
   }
-  return { ...DEFAULT_ORG_SETTINGS };
+  return { ...DEFAULT_ORG_SETTINGS, scoreWeights: { ...DEFAULT_SCORE_WEIGHTS } };
 }
 
 // ---------- Onboarding steps ----------
