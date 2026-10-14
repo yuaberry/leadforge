@@ -67,8 +67,10 @@ export const config = {
      * Protege tudo exceto:
      * - _next/static, _next/image (assets internos)
      * - favicon e imagens públicas
-     * - /p/* (páginas de captura públicas — Phase 2) e /go/* (redirects — Phase 3)
+     * - /p/* (páginas de captura públicas — Phase 2)
+     * - /go/* (redirects rastreados — Phase 3)
+     * - /u/* (cancelamento de inscrição — Phase 6)
      */
-    "/((?!_next/static|_next/image|p/|go/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!_next/static|_next/image|p/|go/|u/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],
 };

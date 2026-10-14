@@ -978,6 +978,235 @@ export const goalContributions = pgTable(
   ]
 );
 
+// ---------- Phase 6: E-mail, Campanhas e Suppression ----------
+
+export const campaignChannelEnum = pgEnum("campaign_channel", ["email", "whatsapp"]);
+
+export const campaignStatusEnum = pgEnum("campaign_status", [
+  "draft",
+  "active",
+  "paused",
+  "completed",
+  "cancelled",
+]);
+
+export const campaignModeEnum = pgEnum("campaign_mode", ["manual", "automated"]);
+
+export const campaignLeadStatusEnum = pgEnum("campaign_lead_status", [
+  "pending",
+  "active",
+  "awaiting_approval",
+  "completed",
+  "excluded",
+]);
+
+export const messageStatusEnum = pgEnum("message_status", [
+  "pending_approval",
+  "queued",
+  "sending",
+  "sent",
+  "delivered",
+  "bounced",
+  "replied",
+  "failed",
+  "unsubscribed",
+  "discarded",
+]);
+
+export const messageDirectionEnum = pgEnum("message_direction", ["outbound", "inbound"]);
+
+export const suppressionChannelEnum = pgEnum("suppression_channel", ["email", "whatsapp", "all"]);
+
+export const suppressionReasonEnum = pgEnum("suppression_reason", [
+  "unsubscribe",
+  "bounce",
+  "complaint",
+  "manual",
+  "optout_keyword",
+]);
+
+export const emailProviderEnum = pgEnum("email_provider", ["resend", "mock"]);
+
+/** Campanhas de outreach (steps com esperas, caps e modo manual/automated). */
+export const campaigns = pgTable(
+  "campaigns",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    channel: campaignChannelEnum("channel").default("email").notNull(),
+    mode: campaignModeEnum("mode").default("manual").notNull(),
+    status: campaignStatusEnum("status").default("draft").notNull(),
+    /** Produto promovido — gera links rastreados por lead nas mensagens. */
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    /** Limite diário de envios desta campanha. */
+    dailyCap: integer("daily_cap").default(50).notNull(),
+    activeHourStart: integer("active_hour_start").default(8).notNull(),
+    activeHourEnd: integer("active_hour_end").default(20).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("campaigns_org_status_idx").on(table.organizationId, table.status),
+  ]
+);
+
+/** Etapas da campanha — sequência com esperas (nunca loops infinitos). */
+export const campaignSteps = pgTable(
+  "campaign_steps",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    /** Dias de espera ANTES desta etapa (0 = primeiro contato imediato). */
+    waitDays: integer("wait_days").default(0).notNull(),
+    subject: text("subject").default("").notNull(),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("campaign_steps_position_uq").on(table.campaignId, table.position),
+  ]
+);
+
+/** Estado de cada lead dentro de uma campanha (máquina de estados). */
+export const campaignLeads = pgTable(
+  "campaign_leads",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id")
+      .notNull()
+      .references(() => campaigns.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    status: campaignLeadStatusEnum("status").default("pending").notNull(),
+    /** Próxima etapa (position) — começa em 1. */
+    currentStep: integer("current_step").default(1).notNull(),
+    nextStepAt: timestamp("next_step_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    excludedReason: text("excluded_reason"),
+    addedAt: timestamp("added_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("campaign_leads_uq").on(table.campaignId, table.leadId),
+    index("campaign_leads_due_idx").on(
+      table.organizationId,
+      table.campaignId,
+      table.status,
+      table.nextStepAt
+    ),
+  ]
+);
+
+/** Mensagens enviadas/na fila — com status de ciclo de vida completo. */
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    campaignId: uuid("campaign_id").references(() => campaigns.id, { onDelete: "cascade" }),
+    stepId: uuid("step_id").references(() => campaignSteps.id, { onDelete: "set null" }),
+    channel: campaignChannelEnum("channel").default("email").notNull(),
+    direction: messageDirectionEnum("direction").default("outbound").notNull(),
+    toAddress: text("to_address").notNull(),
+    subject: text("subject"),
+    body: text("body").notNull(),
+    status: messageStatusEnum("status").default("queued").notNull(),
+    provider: text("provider"),
+    providerMessageId: text("provider_message_id"),
+    error: text("error"),
+    sentAt: timestamp("sent_at", { withTimezone: true, mode: "string" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("messages_org_campaign_idx").on(table.organizationId, table.campaignId, table.status),
+    index("messages_lead_idx").on(table.leadId, table.createdAt),
+    index("messages_provider_id_idx").on(table.providerMessageId),
+  ]
+);
+
+/** Identidade de envio da org (from) + roteamento do webhook de eventos. */
+export const emailAccounts = pgTable(
+  "email_accounts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    provider: emailProviderEnum("provider").default("resend").notNull(),
+    fromEmail: text("from_email").notNull(),
+    fromName: text("from_name").notNull(),
+    /** Roteamento/autenticação do webhook de bounce/complaint/delivery. */
+    webhookToken: text("webhook_token").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("email_accounts_token_uq").on(table.webhookToken),
+    index("email_accounts_org_idx").on(table.organizationId),
+  ]
+);
+
+/**
+ * SUPPRESSION LIST — invariável do sistema: contato aqui NUNCA recebe mensagem
+ * (o gate de elegibilidade consulta esta tabela em TODO path de envio).
+ */
+export const suppressionList = pgTable(
+  "suppression_list",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    emailNormalized: text("email_normalized"),
+    phoneNormalized: text("phone_normalized"),
+    channel: suppressionChannelEnum("channel").default("all").notNull(),
+    reason: suppressionReasonEnum("reason").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("suppression_email_uq")
+      .on(table.organizationId, table.emailNormalized)
+      .where(sql`${table.emailNormalized} is not null`),
+    uniqueIndex("suppression_phone_uq")
+      .on(table.organizationId, table.phoneNormalized)
+      .where(sql`${table.phoneNormalized} is not null`),
+    index("suppression_org_idx").on(table.organizationId),
+  ]
+);
+
 // ---------- Relations (joins tipados) ----------
 
 export const organizationMembersRelations = relations(organizationMembers, ({ one }) => ({

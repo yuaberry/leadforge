@@ -49,6 +49,7 @@ const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: t
   {
     label: "Crescimento",
     items: [
+      { href: "/campaigns", label: "Campanhas", icon: Send },
       { href: "/integrations", label: "Integrações", icon: Plug },
       { href: "/capture", label: "Captura", icon: Magnet },
       { href: "/import", label: "Importar CSV", icon: Upload },
@@ -58,6 +59,8 @@ const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: t
     label: "Configurações",
     items: [
       { href: "/settings/users", label: "Membros", icon: Users },
+      { href: "/settings/email", label: "E-mail", icon: Inbox },
+      { href: "/settings/suppression", label: "Suppression", icon: ListTodo },
       { href: "/settings/ai", label: "IA & Scoring", icon: Sparkles },
       { href: "/settings/organization", label: "Organização", icon: Settings },
     ],
@@ -66,7 +69,6 @@ const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: t
 
 /** Estados futuros — exibidos honestamente como indisponíveis, com a fase do plano. */
 const COMING_SOON = [
-  { label: "Campanhas & E-mail", phase: "F6", icon: Send },
   { label: "WhatsApp & Inbox", phase: "F7", icon: Inbox },
 ];
 

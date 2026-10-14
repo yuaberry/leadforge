@@ -1,6 +1,5 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { and as drizzleAnd, eq as drizzleEq } from "drizzle-orm";
@@ -17,7 +16,8 @@ import {
   discardMessageDraft,
 } from "@/server/db/repositories/scoring";
 import { listProducts } from "@/server/db/repositories/commerce";
-import { linkTokens, products as productsTable } from "@/server/db/schema";
+import { findOrCreateLeadLinkToken } from "@/server/db/repositories/commerce";
+import { products as productsTable } from "@/server/db/schema";
 import { getAIProvider } from "@/server/providers/ai";
 import { AIProviderError, type LeadAnalysisInput } from "@/server/providers/ai/types";
 import { computeLeadScore, signalsFromLeadData } from "@/server/services/scoring";
@@ -190,42 +190,6 @@ export async function analyzeLeadAction(_prev: AIState, formData: FormData): Pro
 
   revalidatePath(`/leads/${leadId}`);
   return { success: "Análise concluída." };
-}
-
-/** Link rastreado por (lead, produto) — criado uma vez, reusado nas mensagens. */
-async function findOrCreateLeadLinkToken(
-  db: TenantTx,
-  organizationId: string,
-  leadId: string,
-  productId: string | null
-): Promise<string | null> {
-  if (!productId) return null;
-
-  const [existing] = await db
-    .select()
-    .from(linkTokens)
-    .where(
-      drizzleAnd(
-        drizzleEq(linkTokens.organizationId, organizationId),
-        drizzleEq(linkTokens.leadId, leadId),
-        drizzleEq(linkTokens.productId, productId)
-      )
-    )
-    .limit(1);
-
-  if (existing) return existing.token;
-
-  const [created] = await db
-    .insert(linkTokens)
-    .values({
-      organizationId,
-      productId,
-      leadId,
-      label: "Mensagem IA",
-      token: randomBytes(12).toString("base64url"),
-    })
-    .returning();
-  return created.token;
 }
 
 async function appOrigin(): Promise<string> {

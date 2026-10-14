@@ -1,6 +1,7 @@
 import "server-only";
 
 import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and as drizzleAnd, eq as drizzleEq } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 
 import * as schema from "@/server/db/schema";
@@ -141,6 +142,46 @@ export async function recordLinkClick(
     .update(linkTokens)
     .set({ clickCount: sql`${linkTokens.clickCount} + 1` })
     .where(eq(linkTokens.id, values.linkTokenId));
+}
+
+/**
+ * Link rastreado por (lead, produto) — criado uma vez e reutilizado em
+ * mensagens da IA (F4) e campanhas (F6). Idempotente.
+ */
+export async function findOrCreateLeadLinkToken(
+  db: AnyDb,
+  organizationId: string,
+  leadId: string,
+  productId: string | null
+): Promise<string | null> {
+  if (!productId) return null;
+
+  const [existing] = await db
+    .select()
+    .from(linkTokens)
+    .where(
+      drizzleAnd(
+        drizzleEq(linkTokens.organizationId, organizationId),
+        drizzleEq(linkTokens.leadId, leadId),
+        drizzleEq(linkTokens.productId, productId)
+      )
+    )
+    .limit(1);
+
+  if (existing) return existing.token;
+
+  const { randomBytes } = await import("node:crypto");
+  const [created] = await db
+    .insert(linkTokens)
+    .values({
+      organizationId,
+      productId,
+      leadId,
+      label: "Mensagem automática",
+      token: randomBytes(12).toString("base64url"),
+    })
+    .returning();
+  return created.token;
 }
 
 // ---------- Sales ----------

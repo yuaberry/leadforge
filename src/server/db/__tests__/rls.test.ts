@@ -423,4 +423,108 @@ suite("RLS — isolamento entre tenants", () => {
     const [reached] = await service`SELECT status FROM public.goals WHERE id = ${goal.id}`;
     expect(reached.status).toBe("reached");
   });
+
+  it("Phase 6 (gate): contato suprimido NUNCA recebe; opt-out exclui de campanhas futuras", async () => {
+    const { decideEligibility } = await import("@/server/services/eligibility");
+    const { addSuppression, suppressionRowsForContact, markLeadsOptedOutByEmail } = await import(
+      "@/server/db/repositories/campaigns"
+    );
+    const { processCampaignBatch } = await import("@/server/services/campaign-runner");
+    const { getServiceDb } = await import("@/server/db/index");
+    const db = getServiceDb();
+
+    // seed: lead elegível + lead suprimido + campanha ativa automatizada com 1 step
+    const [contactOk] = await service`
+      INSERT INTO public.contacts (organization_id, full_name, email, email_normalized)
+      VALUES (${orgA}, 'Elegível Silva', 'elegivel@test.local', 'elegivel@test.local')
+      RETURNING id
+    `;
+    const [contactSup] = await service`
+      INSERT INTO public.contacts (organization_id, full_name, email, email_normalized)
+      VALUES (${orgA}, 'Suprimido Souza', 'suprimido@test.local', 'suprimido@test.local')
+      RETURNING id
+    `;
+    const [leadOk] = await service`
+      INSERT INTO public.leads (organization_id, contact_id, legal_basis, consent_status)
+      VALUES (${orgA}, ${contactOk.id}, 'legitimate_interest', 'unknown') RETURNING id
+    `;
+    const [leadSup] = await service`
+      INSERT INTO public.leads (organization_id, contact_id, legal_basis, consent_status)
+      VALUES (${orgA}, ${contactSup.id}, 'legitimate_interest', 'unknown') RETURNING id
+    `;
+
+    // suppression do segundo contato (motivo bounce)
+    await addSuppression(db, {
+      organizationId: orgA,
+      emailNormalized: "suprimido@test.local",
+      channel: "all",
+      reason: "bounce",
+    });
+
+    const [campaign] = await service`
+      INSERT INTO public.campaigns (organization_id, name, mode, status, daily_cap)
+      VALUES (${orgA}, 'Campanha Gate', 'automated', 'active', 50) RETURNING id
+    `;
+    await service`
+      INSERT INTO public.campaign_steps (organization_id, campaign_id, position, wait_days, subject, body)
+      VALUES (${orgA}, ${campaign.id}, 1, 0, 'Olá {{nome}}', 'Mensagem de teste para {{nome}}.')
+    `;
+    for (const leadId of [leadOk.id, leadSup.id]) {
+      await service`
+        INSERT INTO public.campaign_leads (organization_id, campaign_id, lead_id, status, current_step, next_step_at)
+        VALUES (${orgA}, ${campaign.id}, ${leadId}, 'active', 1, now())
+      `;
+    }
+    // email account para o from address
+    await service`
+      INSERT INTO public.email_accounts (organization_id, from_email, from_name, webhook_token)
+      VALUES (${orgA}, 'teste@leadforge.dev', 'Teste', 'gatetoken0000000001')
+    `;
+
+    // processa a campanha (mock provider — sem RESEND_API_KEY)
+    const report = await processCampaignBatch(
+      db,
+      { organizationId: orgA, origin: "http://localhost:3000", fromAddress: "Teste <teste@leadforge.dev>" },
+      campaign.id,
+      10
+    );
+
+    // o lead OK foi enviado; o suprimido foi EXCLUÍDO sem mensagem
+    expect(report.processed).toBe(2);
+    expect(report.sent).toBe(1);
+    expect(report.excluded).toBe(1);
+
+    const [supEntry] = await service`
+      SELECT status, excluded_reason FROM public.campaign_leads
+      WHERE campaign_id = ${campaign.id} AND lead_id = ${leadSup.id}
+    `;
+    expect(supEntry.status).toBe("excluded");
+    expect(supEntry.excluded_reason).toBe("suppressed");
+
+    const messagesSup = await service`
+      SELECT count(*)::int AS total FROM public.messages
+      WHERE campaign_id = ${campaign.id} AND lead_id = ${leadSup.id}
+    `;
+    expect(messagesSup[0].total).toBe(0);
+
+    // opt-out por e-mail marca TODOS os leads com aquele endereço
+    const affected = await markLeadsOptedOutByEmail(db, orgA, "elegivel@test.local");
+    expect(affected).toBe(1);
+
+    // e o gate agora bloqueia o lead optado-out
+    const rows = await suppressionRowsForContact(db, orgA, "elegivel@test.local", null);
+    const decision = decideEligibility({
+      email: "elegivel@test.local",
+      phone: null,
+      suppression: rows,
+      optedOutAt: new Date().toISOString(),
+      consentStatus: "unknown",
+      legalBasis: "legitimate_interest",
+      channel: "email",
+    });
+    if (decision.eligible) {
+      throw new Error("Contato optado-out deveria estar bloqueado");
+    }
+    expect(decision.reason).toBe("opted_out");
+  });
 });
