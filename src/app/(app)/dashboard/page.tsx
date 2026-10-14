@@ -11,6 +11,7 @@ import { requireOrgContext } from "@/server/auth/session";
 import { withTenantDb } from "@/server/db/tenant";
 import { countPendingInvites, listMembers } from "@/server/db/repositories/organizations";
 import { leadsOverviewCounts, recentLeads } from "@/server/db/repositories/leads";
+import { salesTotals } from "@/server/db/repositories/commerce";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -19,13 +20,14 @@ export const metadata: Metadata = {
 export default async function DashboardPage() {
   const ctx = await requireOrgContext();
 
-  const { members, pendingInvites, stageCounts, recent } = await withTenantDb(
+  const { members, pendingInvites, stageCounts, recent, totals } = await withTenantDb(
     ctx.accessToken,
     async (db) => ({
       members: await listMembers(db, ctx.organization.id),
       pendingInvites: await countPendingInvites(db, ctx.organization.id),
       stageCounts: await leadsOverviewCounts(db, ctx.organization.id),
       recent: await recentLeads(db, ctx.organization.id, 5),
+      totals: await salesTotals(db, ctx.organization.id),
     })
   );
 
@@ -68,6 +70,20 @@ export default async function DashboardPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-emerald-500/20 bg-emerald-500/5">
+          <CardHeader className="pb-2">
+            <CardDescription>Comissões (pagas)</CardDescription>
+            <CardTitle className="text-3xl text-emerald-400">
+              {formatCurrency(totals.paidCommission)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Badge variant={totals.paidCount > 0 ? "success" : "secondary"}>
+              {totals.paidCount} venda{totals.paidCount === 1 ? "" : "s"}
+            </Badge>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="flex items-center gap-1.5">

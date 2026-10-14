@@ -285,4 +285,62 @@ suite("RLS — isolamento entre tenants", () => {
 
     await service`DELETE FROM public.contacts WHERE id = ${contact.id}`;
   });
+
+  it("Phase 3: webhook simulado cria sale idempotente com atribuição (gate)", async () => {
+    const { ingestSaleEvent } = await import("@/server/services/commerce-ingest");
+
+    const [product] = await service`
+      INSERT INTO public.products (organization_id, name, type, platform, checkout_url)
+      VALUES (${orgA}, 'Produto Gate', 'own', 'kiwify', 'https://pay.kiwify.com.br/gate')
+      RETURNING id
+    `;
+    const [token] = await service`
+      INSERT INTO public.link_tokens (organization_id, product_id, label, token)
+      VALUES (${orgA}, ${product.id}, 'teste', 'gatetoken0001')
+      RETURNING id
+    `;
+
+    const event = {
+      externalOrderId: "ord_gate_1",
+      status: "paid" as const,
+      amount: 297,
+      commissionAmount: 148.5,
+      currency: "BRL",
+      customerName: "Cliente Teste",
+      customerEmail: "cliente@test.local",
+      externalProductId: null,
+      utm: { source: "instagram", campaign: "lf_gatetoken0001", content: "direct", term: null },
+      occurredAt: new Date().toISOString(),
+    };
+
+    const input = {
+      organizationId: orgA,
+      integrationId: null,
+      platform: "kiwify",
+      rawPayload: { event: "order.paid" },
+    };
+
+    const first = await ingestSaleEvent({ ...input, event });
+    expect(first.created).toBe(true);
+    expect(first.attributed).toBe(true);
+
+    // idempotência: mesmo pedido não duplica
+    const second = await ingestSaleEvent({ ...input, event });
+    expect(second.created).toBe(false);
+    expect(second.saleId).toBe(first.saleId);
+
+    const salesRows = await service`SELECT * FROM public.sales WHERE organization_id = ${orgA}`;
+    expect(salesRows).toHaveLength(1);
+    expect(String(salesRows[0].link_token_id)).toBe(token.id);
+    expect(String(salesRows[0].product_id)).toBe(product.id);
+    expect(salesRows[0].status).toBe("paid");
+
+    // reembolso atualiza o status
+    await ingestSaleEvent({
+      ...input,
+      event: { ...event, status: "refunded" },
+    });
+    const [updated] = await service`SELECT status FROM public.sales WHERE id = ${first.saleId}`;
+    expect(updated.status).toBe("refunded");
+  });
 });

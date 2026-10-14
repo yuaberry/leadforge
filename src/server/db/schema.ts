@@ -1,8 +1,10 @@
 import { relations } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -26,9 +28,10 @@ import { DEFAULT_ORG_SETTINGS, type OrgSettings } from "@/types/org";
  *
  * FASES (ver IMPLEMENTATION_PLAN.md):
  * - Phase 1: users, organizations, organization_members, invites
- * - Phase 2 (este arquivo): companies, contacts, leads, tags, lead_tags,
+ * - Phase 2: companies, contacts, leads, tags, lead_tags,
  *   activities, lead_sources, capture_pages, form_submissions, import_batches
- * - Phase 3: products, sales, link_tokens, link_clicks
+ * - Phase 3 (este arquivo): products, commerce_integrations, link_tokens,
+ *   link_clicks, sales
  */
 
 // ---------- Enums ----------
@@ -506,6 +509,201 @@ export const importBatches = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true, mode: "string" }),
   },
   (table) => [index("import_batches_org_idx").on(table.organizationId, table.createdAt)]
+);
+
+// ---------- Phase 3: Produtos, Vendas e Atribuição ----------
+
+export const productTypeEnum = pgEnum("product_type", ["own", "affiliate"]);
+
+export const commercePlatformEnum = pgEnum("commerce_platform", [
+  "kiwify",
+  "kirvano",
+  "hotmart",
+  "eduzz",
+  "braip",
+  "monetizze",
+  "custom",
+]);
+
+export const productStatusEnum = pgEnum("product_status", ["active", "archived"]);
+
+export const saleStatusEnum = pgEnum("sale_status", [
+  "pending",
+  "paid",
+  "refunded",
+  "chargedback",
+  "canceled",
+]);
+
+export const saleSourceEnum = pgEnum("sale_source", ["webhook", "manual"]);
+
+/** Catálogo do usuário — autorais ou de afiliado (total autonomia). */
+export const products = pgTable(
+  "products",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    type: productTypeEnum("type").notNull(),
+    platform: commercePlatformEnum("platform").notNull(),
+    checkoutUrl: text("checkout_url").notNull(),
+    price: numeric("price", { precision: 12, scale: 2, mode: "number" }),
+    commissionPercent: numeric("commission_percent", { precision: 5, scale: 2, mode: "number" }),
+    category: text("category"),
+    niche: text("niche"),
+    imageUrl: text("image_url"),
+    targetAudience: text("target_audience"),
+    /** Um argumento por linha — insumo da IA na Fase 4. */
+    sellingArguments: jsonb("selling_arguments").default([]).notNull(),
+    status: productStatusEnum("status").default("active").notNull(),
+    /** ID do produto na plataforma (casa com webhooks quando disponível). */
+    externalProductId: text("external_product_id"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("products_org_idx").on(table.organizationId),
+    index("products_org_platform_idx").on(table.organizationId, table.platform),
+  ]
+);
+
+/**
+ * Conexão com o checkout (Kiwify/Kirvano/...). O webhook_token roteia e
+ * autentica os webhooks por organização: /api/webhooks/commerce/[platform]?token=...
+ */
+export const commerceIntegrations = pgTable(
+  "commerce_integrations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    platform: commercePlatformEnum("platform").notNull(),
+    name: text("name").notNull(),
+    /** Roteamento + autenticação do webhook (secreto — nunca listado sem permissão). */
+    webhookToken: text("webhook_token").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("commerce_integrations_token_uq").on(table.webhookToken),
+    index("commerce_integrations_org_idx").on(table.organizationId),
+  ]
+);
+
+/** Links rastreados /go/[token] — a fonte de verdade da atribuição. */
+export const linkTokens = pgTable(
+  "link_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    /** Rótulo de onde o link é usado (bio, descrição do vídeo, story...). */
+    label: text("label").notNull(),
+    token: text("token").notNull(),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    active: boolean("active").default(true).notNull(),
+    clickCount: integer("click_count").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("link_tokens_token_uq").on(table.token),
+    index("link_tokens_org_idx").on(table.organizationId),
+    index("link_tokens_product_idx").on(table.productId),
+  ]
+);
+
+/** Log de cliques em links rastreados (gravação via serviceDb — /go/ é público). */
+export const linkClicks = pgTable(
+  "link_clicks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    linkTokenId: uuid("link_token_id")
+      .notNull()
+      .references(() => linkTokens.id, { onDelete: "cascade" }),
+    productId: uuid("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    destinationUrl: text("destination_url").notNull(),
+    ip: text("ip"),
+    userAgent: text("user_agent"),
+    referrer: text("referrer"),
+    clickedAt: timestamp("clicked_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("link_clicks_token_idx").on(table.linkTokenId, table.clickedAt),
+    index("link_clicks_org_idx").on(table.organizationId),
+  ]
+);
+
+/**
+ * Vendas — entram via webhook (automático) ou lançamento manual.
+ * Idempotente por (organization_id, platform, external_order_id).
+ */
+export const sales = pgTable(
+  "sales",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    integrationId: uuid("integration_id").references(() => commerceIntegrations.id, {
+      onDelete: "set null",
+    }),
+    productId: uuid("product_id").references(() => products.id, { onDelete: "set null" }),
+    platform: commercePlatformEnum("platform").notNull(),
+    externalOrderId: text("external_order_id").notNull(),
+    customerName: text("customer_name"),
+    customerEmail: text("customer_email"),
+    customerEmailNormalized: text("customer_email_normalized"),
+    amount: numeric("amount", { precision: 12, scale: 2, mode: "number" }),
+    commissionAmount: numeric("commission_amount", { precision: 12, scale: 2, mode: "number" }),
+    currency: text("currency").default("BRL").notNull(),
+    status: saleStatusEnum("status").notNull(),
+    source: saleSourceEnum("source").default("webhook").notNull(),
+    utm: jsonb("utm").default({}).notNull(),
+    /** Atribuição: link rastreado que gerou a venda (via utm_campaign lf_*). */
+    linkTokenId: uuid("link_token_id").references(() => linkTokens.id, { onDelete: "set null" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    raw: jsonb("raw"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("sales_org_platform_order_uq").on(
+      table.organizationId,
+      table.platform,
+      table.externalOrderId
+    ),
+    index("sales_org_occurred_idx").on(table.organizationId, table.occurredAt),
+    index("sales_product_idx").on(table.productId),
+  ]
 );
 
 // ---------- Relations (joins tipados) ----------

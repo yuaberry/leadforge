@@ -4,17 +4,18 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Building2,
+  CircleDollarSign,
   Inbox,
   LayoutDashboard,
   Lock,
-  Package,
+  Magnet,
+  Plug,
   Send,
   Sparkles,
   TrendingUp,
   Upload,
-  Users,
-  Magnet,
   UserRound,
+  Users,
 } from "lucide-react";
 
 import { Logo } from "@/components/layout/logo";
@@ -24,6 +25,9 @@ const ACTIVE_NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leads", label: "Leads", icon: UserRound },
   { href: "/companies", label: "Empresas", icon: Building2 },
+  { href: "/products", label: "Produtos", icon: CircleDollarSign },
+  { href: "/sales", label: "Vendas", icon: TrendingUp },
+  { href: "/integrations", label: "Integrações", icon: Plug },
   { href: "/capture", label: "Captura", icon: Magnet },
   { href: "/import", label: "Importar CSV", icon: Upload },
   { href: "/settings/users", label: "Membros", icon: Users },
@@ -32,7 +36,6 @@ const ACTIVE_NAV = [
 
 /** Estados futuros — exibidos honestamente como indisponíveis, com a fase do plano. */
 const COMING_SOON = [
-  { label: "Produtos & Vendas", phase: "F3", icon: Package },
   { label: "Scoring & IA", phase: "F4", icon: Sparkles },
   { label: "Lucro & Metas", phase: "F5", icon: TrendingUp },
   { label: "Campanhas & E-mail", phase: "F6", icon: Send },
