@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   Lock,
   Magnet,
+  MessageCircle,
   Plug,
   Send,
   Target,
@@ -31,6 +32,7 @@ const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: t
     label: "Operação",
     items: [
       { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { href: "/inbox", label: "Inbox", icon: Inbox },
       { href: "/leads", label: "Leads", icon: UserRound },
       { href: "/companies", label: "Empresas", icon: Building2 },
       { href: "/pipeline", label: "Pipeline", icon: KanbanSquare },
@@ -60,6 +62,7 @@ const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: t
     items: [
       { href: "/settings/users", label: "Membros", icon: Users },
       { href: "/settings/email", label: "E-mail", icon: Inbox },
+      { href: "/settings/whatsapp", label: "WhatsApp", icon: MessageCircle },
       { href: "/settings/suppression", label: "Suppression", icon: ListTodo },
       { href: "/settings/ai", label: "IA & Scoring", icon: Sparkles },
       { href: "/settings/organization", label: "Organização", icon: Settings },
@@ -68,9 +71,7 @@ const NAV_GROUPS: { label: string; items: { href: string; label: string; icon: t
 ];
 
 /** Estados futuros — exibidos honestamente como indisponíveis, com a fase do plano. */
-const COMING_SOON = [
-  { label: "WhatsApp & Inbox", phase: "F7", icon: Inbox },
-];
+const COMING_SOON: { label: string; phase: string; icon: typeof Inbox }[] = [];
 
 export function AppSidebar({
   role,
@@ -117,26 +118,28 @@ export function AppSidebar({
           </div>
         ))}
 
-        <div>
-          <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
-            Em breve
-          </p>
-          <div className="space-y-0.5">
-            {COMING_SOON.map((item) => (
-              <div
-                key={item.label}
-                className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-muted-foreground/40"
-                title={`Chega na ${item.phase}`}
-              >
-                <Lock className="size-3.5" aria-hidden="true" />
-                <span className="flex-1">{item.label}</span>
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold">
-                  {item.phase}
-                </span>
-              </div>
-            ))}
+        {COMING_SOON.length > 0 && (
+          <div>
+            <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+              Em breve
+            </p>
+            <div className="space-y-0.5">
+              {COMING_SOON.map((item) => (
+                <div
+                  key={item.label}
+                  className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-1.5 text-sm text-muted-foreground/40"
+                  title={`Chega na ${item.phase}`}
+                >
+                  <Lock className="size-3.5" aria-hidden="true" />
+                  <span className="flex-1">{item.label}</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold">
+                    {item.phase}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </nav>
 
       <div className="border-t border-sidebar-border p-4">

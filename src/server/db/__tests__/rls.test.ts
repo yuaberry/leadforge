@@ -527,4 +527,121 @@ suite("RLS — isolamento entre tenants", () => {
     }
     expect(decision.reason).toBe("opted_out");
   });
+
+  it("Phase 7 (gate): webhook WhatsApp simulado cria conversa, entrega status e opt-out suprime", async () => {
+    const { parseWhatsAppWebhook } = await import("@/server/services/whatsapp-webhook");
+    const { handleWhatsAppWebhook } = await import("@/server/services/whatsapp-inbound");
+    const { getServiceDb } = await import("@/server/db/index");
+    const { getWhatsAppProvider } = await import("@/server/providers/whatsapp");
+    const db = getServiceDb();
+
+    // provider precisa estar em modo mock (sem credenciais da Meta no CI/dev)
+    expect(getWhatsAppProvider().kind).toBe("mock");
+
+    // 1. Mensagem recebida de um contato novo
+    const inbound = parseWhatsAppWebhook({
+      object: "whatsapp_business_account",
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                metadata: { phone_number_id: "PNID_TEST" },
+                contacts: [{ wa_id: "5511900000001", profile: { name: "Zap Cliente" } }],
+                messages: [
+                  {
+                    id: "wamid.in.1",
+                    from: "5511900000001",
+                    timestamp: 1760000000,
+                    type: "text",
+                    text: { body: "Oi! Quero saber mais sobre o site." },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(inbound.messages).toHaveLength(1);
+
+    const report1 = await handleWhatsAppWebhook(db, orgA, inbound);
+    expect(report1.inboundMessages).toBe(1);
+    expect(report1.newLeads).toBe(1);
+    expect(report1.optOuts).toBe(0);
+
+    // conversa + mensagem inbound registradas
+    const convs = await service`
+      SELECT * FROM public.conversations WHERE organization_id = ${orgA}
+    `;
+    expect(convs).toHaveLength(1);
+    expect(convs[0].channel).toBe("whatsapp");
+    expect(Number(convs[0].unread_count)).toBe(1);
+
+    // 2. Opt-out por palavra-chave (SAIR)
+    const optout = parseWhatsAppWebhook({
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                metadata: { phone_number_id: "PNID_TEST" },
+                messages: [
+                  {
+                    id: "wamid.in.2",
+                    from: "5511900000001",
+                    timestamp: 1760000100,
+                    type: "text",
+                    text: { body: "SAIR" },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const report2 = await handleWhatsAppWebhook(db, orgA, optout);
+    expect(report2.optOuts).toBe(1);
+
+    // suppression por telefone criada + lead marcado opted_out
+    const sup = await service`
+      SELECT * FROM public.suppression_list
+      WHERE organization_id = ${orgA} AND phone_normalized = '5511900000001'
+    `;
+    expect(sup).toHaveLength(1);
+    expect(sup[0].reason).toBe("optout_keyword");
+
+    const [optedLead] = await service`
+      SELECT opted_out_at FROM public.leads WHERE organization_id = ${orgA}
+    `;
+    expect(optedLead.opted_out_at).not.toBeNull();
+
+    // 3. Idempotência: reentrega da mesma mensagem não duplica
+    const report3 = await handleWhatsAppWebhook(db, orgA, inbound);
+    expect(report3.inboundMessages).toBe(0);
+
+    // 4. Status update (mensagem outbound entregue e lida)
+    //    (envia uma resposta manual para ter uma mensagem outbound com provider id)
+    const msgsBefore = await service`
+      SELECT count(*)::int AS total FROM public.conversation_messages WHERE organization_id = ${orgA}
+    `;
+    expect(msgsBefore[0].total).toBeGreaterThanOrEqual(2); // inbound + confirmação de opt-out
+
+    const statusUpdate = parseWhatsAppWebhook({
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                statuses: [{ id: "wamid_mock_status_1", status: "delivered" }],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const report4 = await handleWhatsAppWebhook(db, orgA, statusUpdate);
+    expect(report4.statusUpdates).toBe(1);
+  });
 });

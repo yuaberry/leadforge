@@ -12,6 +12,7 @@ import { decideEligibility } from "@/server/services/eligibility";
 import { unsubscribeLink } from "@/server/services/unsubscribe";
 import { suppressionRowsForContact, addSuppression } from "@/server/db/repositories/campaigns";
 import { findOrCreateLeadLinkToken } from "@/server/db/repositories/commerce";
+import { recordConversationMessage } from "@/server/db/repositories/inbox";
 import { recordActivity } from "@/server/db/repositories/leads";
 import { products } from "@/server/db/schema";
 
@@ -239,6 +240,17 @@ export async function processCampaignBatch(
         sentAt: new Date().toISOString(),
       });
 
+      // inbox: registra a conversa de e-mail (outbound)
+      await recordConversationMessage(db, {
+        organizationId: ctx.organizationId,
+        leadId: lead.id,
+        channel: "email",
+        direction: "outbound",
+        body: bodyWithFooter,
+        status: "sent",
+        providerMessageId: result.providerMessageId,
+      });
+
       const nextStep = steps.find((s) => s.position === entry.currentStep + 1);
       if (nextStep) {
         const nextAt = new Date(
@@ -359,6 +371,17 @@ export async function approveAndSendMessage(
       sentAt: new Date().toISOString(),
     })
     .where(eq(schema.messages.id, messageId));
+
+  // inbox: registra o envio aprovado como conversa de e-mail
+  await recordConversationMessage(db, {
+    organizationId: ctx.organizationId,
+    leadId: message.leadId,
+    channel: "email",
+    direction: "outbound",
+    body: message.body,
+    status: "sent",
+    providerMessageId: result.providerMessageId,
+  });
 
   // avança o lead na campanha
   if (!message.campaignId) return { ok: true };

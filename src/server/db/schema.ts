@@ -1207,6 +1207,109 @@ export const suppressionList = pgTable(
   ]
 );
 
+// ---------- Phase 7: WhatsApp e Inbox ----------
+
+export const conversationChannelEnum = pgEnum("conversation_channel", ["email", "whatsapp"]);
+
+export const conversationStatusEnum = pgEnum("conversation_status", ["open", "closed"]);
+
+export const conversationDirectionEnum = pgEnum("conversation_direction", ["inbound", "outbound"]);
+
+export const conversationMessageStatusEnum = pgEnum("conversation_message_status", [
+  "received",
+  "sent",
+  "delivered",
+  "read",
+  "failed",
+]);
+
+/** Conta WhatsApp Business (Cloud API) por org — roteia o webhook. */
+export const whatsappAccounts = pgTable(
+  "whatsapp_accounts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    /** phone_number_id da Meta (identifica o número no webhook). */
+    phoneNumberId: text("phone_number_id").notNull(),
+    displayPhone: text("display_phone").notNull(),
+    displayName: text("display_name").notNull(),
+    /** Roteamento/autenticação do webhook de entrada/status. */
+    webhookToken: text("webhook_token").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("whatsapp_accounts_token_uq").on(table.webhookToken),
+    index("whatsapp_accounts_phone_idx").on(table.phoneNumberId),
+    index("whatsapp_accounts_org_idx").on(table.organizationId),
+  ]
+);
+
+/** Conversas da inbox unificada — uma por (lead, canal). */
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    channel: conversationChannelEnum("channel").notNull(),
+    status: conversationStatusEnum("status").default("open").notNull(),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    lastMessagePreview: text("last_message_preview"),
+    lastDirection: conversationDirectionEnum("last_direction").default("outbound").notNull(),
+    unreadCount: integer("unread_count").default(0).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    uniqueIndex("conversations_lead_channel_uq").on(table.leadId, table.channel),
+    index("conversations_org_last_idx").on(table.organizationId, table.lastMessageAt),
+  ]
+);
+
+/** Mensagens das conversas (in e out) com status do provedor. */
+export const conversationMessages = pgTable(
+  "conversation_messages",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id")
+      .notNull()
+      .references(() => leads.id, { onDelete: "cascade" }),
+    channel: conversationChannelEnum("channel").notNull(),
+    direction: conversationDirectionEnum("direction").notNull(),
+    body: text("body").notNull(),
+    status: conversationMessageStatusEnum("status").default("sent").notNull(),
+    providerMessageId: text("provider_message_id"),
+    error: text("error"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("conversation_messages_conv_idx").on(table.conversationId, table.createdAt),
+    index("conversation_messages_provider_idx").on(table.providerMessageId),
+  ]
+);
+
 // ---------- Relations (joins tipados) ----------
 
 export const organizationMembersRelations = relations(organizationMembers, ({ one }) => ({
