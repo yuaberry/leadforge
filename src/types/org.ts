@@ -17,6 +17,13 @@ export type OrgDream = {
   productUrl: string | null;
 };
 
+export type OrgGoalSettings = {
+  /** % da comissão de cada venda paga que alimenta a meta ativa (0-100). */
+  autoAllocatePercent: number;
+  /** Meta que recebe a alocação automática. */
+  targetGoalId: string | null;
+};
+
 export type OrgSettings = {
   businessMode: BusinessMode | null;
   categories: string[];
@@ -25,6 +32,7 @@ export type OrgSettings = {
   dreamSkipped: boolean;
   onboardedAt: string | null;
   scoreWeights: OrgScoreWeights;
+  goalSettings: OrgGoalSettings;
 };
 
 /** Pesos de scoring — chaves de ScoreWeightKey com valores 0..100. */
@@ -38,6 +46,7 @@ export const DEFAULT_ORG_SETTINGS: OrgSettings = {
   dreamSkipped: false,
   onboardedAt: null,
   scoreWeights: {},
+  goalSettings: { autoAllocatePercent: 0, targetGoalId: null },
 };
 
 /** Categorias sugeridas no onboarding (o usuário pode escolher qualquer uma). */

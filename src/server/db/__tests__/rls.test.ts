@@ -343,4 +343,84 @@ suite("RLS — isolamento entre tenants", () => {
     const [updated] = await service`SELECT status FROM public.sales WHERE id = ${first.saleId}`;
     expect(updated.status).toBe("refunded");
   });
+
+  it("Phase 5 (gate): venda paga alimenta lucro e sobe a meta automaticamente", async () => {
+    const { ingestSaleEvent } = await import("@/server/services/commerce-ingest");
+
+    // seed: meta + settings com alocação 50%
+    const [goal] = await service`
+      INSERT INTO public.goals (organization_id, name, target_amount)
+      VALUES (${orgA}, 'Notebook dos sonhos', 500)
+      RETURNING id
+    `;
+    await service`
+      UPDATE public.organizations
+      SET settings = jsonb_build_object('goalSettings', jsonb_build_object('autoAllocatePercent', 50, 'targetGoalId', ${goal.id}))
+      WHERE id = ${orgA}
+    `;
+
+    const event = {
+      externalOrderId: "ord_goal_1",
+      status: "paid" as const,
+      amount: 1000,
+      commissionAmount: 400,
+      currency: "BRL",
+      customerName: "Cliente Meta",
+      customerEmail: "meta@test.local",
+      externalProductId: null,
+      utm: { source: null, campaign: null, content: null, term: null },
+      occurredAt: new Date().toISOString(),
+    };
+
+    const result = await ingestSaleEvent({
+      organizationId: orgA,
+      integrationId: null,
+      platform: "kiwify",
+      event,
+      rawPayload: {},
+    });
+    expect(result.created).toBe(true);
+
+    // 1. receita registrada no financeiro (comissão R$ 400)
+    const finance = await service`
+      SELECT type, amount FROM public.financial_transactions
+      WHERE organization_id = ${orgA} AND sale_id = ${result.saleId}
+    `;
+    expect(finance).toHaveLength(1);
+    expect(finance[0].type).toBe("revenue");
+    expect(Number(finance[0].amount)).toBe(400);
+
+    // 2. meta recebeu 50% da comissão (R$ 200) — e marcou atingida (alvo 500? não, 200 < 500)
+    const contributions = await service`
+      SELECT amount, source FROM public.goal_contributions WHERE goal_id = ${goal.id}
+    `;
+    expect(contributions).toHaveLength(1);
+    expect(Number(contributions[0].amount)).toBe(200);
+    expect(contributions[0].source).toBe("auto_sale");
+
+    // 3. idempotência: reentrega da venda NÃO duplica contribuição
+    await ingestSaleEvent({
+      organizationId: orgA,
+      integrationId: null,
+      platform: "kiwify",
+      event,
+      rawPayload: {},
+    });
+    const contributionsAfter = await service`
+      SELECT amount FROM public.goal_contributions WHERE goal_id = ${goal.id}
+    `;
+    expect(contributionsAfter).toHaveLength(1);
+
+    // 4. meta atingida quando completa → status reached + celebração
+    await service`
+      INSERT INTO public.goal_contributions (organization_id, goal_id, amount, source)
+      VALUES (${orgA}, ${goal.id}, 350, 'manual')
+    `;
+    const { markGoalReachedIfDue } = await import("@/server/db/repositories/crm");
+    const { getServiceDb } = await import("@/server/db/index");
+    const db = getServiceDb();
+    await markGoalReachedIfDue(db, orgA, goal.id);
+    const [reached] = await service`SELECT status FROM public.goals WHERE id = ${goal.id}`;
+    expect(reached.status).toBe("reached");
+  });
 });

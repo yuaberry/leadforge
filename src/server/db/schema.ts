@@ -800,6 +800,184 @@ export const messageDrafts = pgTable(
   ]
 );
 
+// ---------- Phase 5: CRM, Financeiro e Metas ----------
+
+export const taskTypeEnum = pgEnum("task_type", [
+  "call",
+  "whatsapp",
+  "email",
+  "meeting",
+  "proposal",
+  "followup",
+]);
+
+export const taskPriorityEnum = pgEnum("task_priority", ["low", "medium", "high", "urgent"]);
+
+export const taskStatusEnum = pgEnum("task_status", ["open", "done", "cancelled"]);
+
+export const financialTypeEnum = pgEnum("financial_type", ["revenue", "expense"]);
+
+export const financialCategoryEnum = pgEnum("financial_category", [
+  "own_sale",
+  "affiliate_commission",
+  "ad_spend",
+  "tools",
+  "fees",
+  "other",
+]);
+
+export const financialSourceEnum = pgEnum("financial_source", ["manual", "sale_webhook"]);
+
+export const goalStatusEnum = pgEnum("goal_status", [
+  "dreaming",
+  "saving",
+  "reached",
+  "paused",
+]);
+
+export const goalContributionSourceEnum = pgEnum("goal_contribution_source", [
+  "manual",
+  "auto_sale",
+]);
+
+/** Oportunidades do pipeline (forecast de CRM). */
+export const deals = pgTable(
+  "deals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    stage: leadStageEnum("stage").default("new").notNull(),
+    value: numeric("value", { precision: 12, scale: 2, mode: "number" }),
+    expectedCloseDate: timestamp("expected_close_date", { withTimezone: true, mode: "string" }),
+    ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
+    notes: text("notes"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("deals_org_stage_idx").on(table.organizationId, table.stage),
+    index("deals_lead_idx").on(table.leadId),
+  ]
+);
+
+/** Tarefas do time comercial. */
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    dealId: uuid("deal_id").references(() => deals.id, { onDelete: "cascade" }),
+    assigneeId: uuid("assignee_id").references(() => users.id, { onDelete: "set null" }),
+    title: text("title").notNull(),
+    type: taskTypeEnum("type").default("followup").notNull(),
+    priority: taskPriorityEnum("priority").default("medium").notNull(),
+    status: taskStatusEnum("status").default("open").notNull(),
+    dueAt: timestamp("due_at", { withTimezone: true, mode: "string" }),
+    completedAt: timestamp("completed_at", { withTimezone: true, mode: "string" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("tasks_org_status_idx").on(table.organizationId, table.status, table.dueAt),
+    index("tasks_assignee_idx").on(table.assigneeId),
+  ]
+);
+
+/**
+ * Lançamentos financeiros — receitas (vendas autorais + comissões, automáticas
+ * via webhook reconciliado) e despesas (tráfego, ferramentas, taxas).
+ */
+export const financialTransactions = pgTable(
+  "financial_transactions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    type: financialTypeEnum("type").notNull(),
+    category: financialCategoryEnum("category").notNull(),
+    description: text("description").notNull(),
+    amount: numeric("amount", { precision: 12, scale: 2, mode: "number" }).notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+    source: financialSourceEnum("source").default("manual").notNull(),
+    saleId: uuid("sale_id").references(() => sales.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("financial_org_occurred_idx").on(table.organizationId, table.occurredAt),
+    uniqueIndex("financial_sale_uq")
+      .on(table.saleId)
+      .where(sql`${table.saleId} is not null`),
+  ]
+);
+
+/** Metas & Sonhos — o motor motivacional. */
+export const goals = pgTable(
+  "goals",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    imageUrl: text("image_url"),
+    productUrl: text("product_url"),
+    targetAmount: numeric("target_amount", { precision: 12, scale: 2, mode: "number" }).notNull(),
+    status: goalStatusEnum("status").default("dreaming").notNull(),
+    targetDate: timestamp("target_date", { withTimezone: true, mode: "string" }),
+    reachedAt: timestamp("reached_at", { withTimezone: true, mode: "string" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [index("goals_org_idx").on(table.organizationId)]
+);
+
+/** Contribuições para as metas — manuais ou automáticas (% de cada venda). */
+export const goalContributions = pgTable(
+  "goal_contributions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    goalId: uuid("goal_id")
+      .notNull()
+      .references(() => goals.id, { onDelete: "cascade" }),
+    amount: numeric("amount", { precision: 12, scale: 2, mode: "number" }).notNull(),
+    source: goalContributionSourceEnum("source").default("manual").notNull(),
+    saleId: uuid("sale_id").references(() => sales.id, { onDelete: "set null" }),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => [
+    index("goal_contributions_goal_idx").on(table.goalId, table.createdAt),
+    // idempotência: a mesma venda nunca contribui duas vezes para a mesma meta
+    uniqueIndex("goal_contributions_goal_sale_uq")
+      .on(table.goalId, table.saleId)
+      .where(sql`${table.saleId} is not null`),
+  ]
+);
+
 // ---------- Relations (joins tipados) ----------
 
 export const organizationMembersRelations = relations(organizationMembers, ({ one }) => ({

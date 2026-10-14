@@ -31,6 +31,12 @@ export const orgSettingsSchema = z.object({
   dreamSkipped: z.boolean(),
   onboardedAt: z.string().datetime().nullable(),
   scoreWeights: z.record(z.string(), z.number()).default({}),
+  goalSettings: z
+    .object({
+      autoAllocatePercent: z.number().min(0).max(100).default(0),
+      targetGoalId: z.string().uuid().nullable().default(null),
+    })
+    .default({ autoAllocatePercent: 0, targetGoalId: null }),
 });
 
 /** Mescla pesos salvos com os defaults (chaves novas sempre têm valor). */
@@ -54,9 +60,19 @@ export function parseOrgSettings(raw: unknown): OrgSettings {
       ...parsed.data,
       dream: parsed.data.dream as OrgSettings["dream"],
       scoreWeights: parseScoreWeights(parsed.data.scoreWeights),
+      goalSettings: {
+        autoAllocatePercent: Math.max(
+          0,
+          Math.min(100, Math.round(parsed.data.goalSettings?.autoAllocatePercent ?? 0))
+        ),
+        targetGoalId: parsed.data.goalSettings?.targetGoalId ?? null,
+      },
     } as OrgSettings;
   }
-  return { ...DEFAULT_ORG_SETTINGS, scoreWeights: { ...DEFAULT_SCORE_WEIGHTS } };
+  return {
+    ...DEFAULT_ORG_SETTINGS,
+    scoreWeights: { ...DEFAULT_SCORE_WEIGHTS },
+  };
 }
 
 // ---------- Onboarding steps ----------

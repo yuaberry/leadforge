@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Magnet, Package, Upload, UserRound, Users } from "lucide-react";
+import { ArrowRight, CheckCircle2, Magnet, Package, Target, Upload, UserRound, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,12 @@ import { withTenantDb } from "@/server/db/tenant";
 import { countPendingInvites, listMembers } from "@/server/db/repositories/organizations";
 import { leadsOverviewCounts, recentLeads } from "@/server/db/repositories/leads";
 import { salesTotals } from "@/server/db/repositories/commerce";
+import {
+  financialTotals,
+  listGoals,
+  urgentTasksCount,
+} from "@/server/db/repositories/crm";
+import { goalProgress } from "@/server/services/goals";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -20,16 +26,17 @@ export const metadata: Metadata = {
 export default async function DashboardPage() {
   const ctx = await requireOrgContext();
 
-  const { members, pendingInvites, stageCounts, recent, totals } = await withTenantDb(
-    ctx.accessToken,
-    async (db) => ({
+  const { members, pendingInvites, stageCounts, recent, totals, finance, goals, urgentTasks } =
+    await withTenantDb(ctx.accessToken, async (db) => ({
       members: await listMembers(db, ctx.organization.id),
       pendingInvites: await countPendingInvites(db, ctx.organization.id),
       stageCounts: await leadsOverviewCounts(db, ctx.organization.id),
       recent: await recentLeads(db, ctx.organization.id, 5),
       totals: await salesTotals(db, ctx.organization.id),
-    })
-  );
+      finance: await financialTotals(db, ctx.organization.id),
+      goals: await listGoals(db, ctx.organization.id),
+      urgentTasks: await urgentTasksCount(db, ctx.organization.id),
+    }));
 
   const settings = parseOrgSettings(ctx.organization.settings);
   const rolesCount = members.reduce<Record<string, number>>((acc, m) => {
@@ -69,6 +76,58 @@ export default async function DashboardPage() {
         </Card>
       )}
 
+      {/* Meta ativa — "falta R$X" */}
+      {(() => {
+        const settings2 = parseOrgSettings(ctx.organization.settings);
+        const target =
+          goals.find(({ goal }) => goal.id === settings2.goalSettings.targetGoalId) ??
+          goals.find(({ goal }) => goal.status === "saving" || goal.status === "dreaming");
+        if (!target) return null;
+        const progress = goalProgress(target.contributed, target.goal.targetAmount);
+        return (
+          <Card className="overflow-hidden border-white/10 bg-gradient-to-br from-blue-600/10 via-violet-500/10 to-cyan-400/10">
+            <CardContent className="flex flex-col gap-4 pt-6 sm:flex-row sm:items-center">
+              {target.goal.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element -- imagem por URL arbitrária do usuário
+                <img
+                  src={target.goal.imageUrl}
+                  alt={target.goal.name}
+                  className="h-24 w-full rounded-xl border border-white/10 object-cover sm:w-24"
+                />
+              ) : (
+                <div className="flex h-24 w-full items-center justify-center rounded-xl bg-white/5 text-3xl sm:w-24">
+                  <Target className="size-8 text-cyan-300" aria-hidden="true" />
+                </div>
+              )}
+              <div className="flex-1">
+                <p className="text-xs text-muted-foreground">Sua meta agora</p>
+                <p className="text-lg font-semibold">{target.goal.name}</p>
+                <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-secondary">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-blue-500 via-violet-500 to-cyan-400"
+                    style={{ width: `${progress.percent}%` }}
+                    role="progressbar"
+                    aria-valuenow={Math.round(progress.percent)}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                  />
+                </div>
+                <p className="mt-1.5 text-sm">
+                  <span className="text-emerald-400">{formatCurrency(progress.contributed)}</span>{" "}
+                  <span className="text-muted-foreground">
+                    de {formatCurrency(progress.target)} ·{" "}
+                    {progress.reached ? "conquistada! 🎉" : `faltam ${formatCurrency(progress.remaining)}`}
+                  </span>
+                </p>
+              </div>
+              <Button asChild variant="secondary" size="sm" className="shrink-0">
+                <Link href="/goals">Gerenciar metas</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-emerald-500/20 bg-emerald-500/5">
           <CardHeader className="pb-2">
@@ -81,6 +140,23 @@ export default async function DashboardPage() {
             <Badge variant={totals.paidCount > 0 ? "success" : "secondary"}>
               {totals.paidCount} venda{totals.paidCount === 1 ? "" : "s"}
             </Badge>
+          </CardContent>
+        </Card>
+
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-2">
+            <CardDescription>Lucro líquido</CardDescription>
+            <CardTitle className={`text-3xl ${finance.profit >= 0 ? "text-primary" : "text-red-400"}`}>
+              {formatCurrency(finance.profit)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button variant="ghost" size="sm" asChild className="-ml-2 gap-1 text-muted-foreground">
+              <Link href="/profit">
+                Receita {formatCurrency(finance.revenue)} · custos {formatCurrency(finance.expense)}
+                <ArrowRight className="size-3.5" aria-hidden="true" />
+              </Link>
+            </Button>
           </CardContent>
         </Card>
 
@@ -233,6 +309,20 @@ export default async function DashboardPage() {
         </Card>
       )}
 
+      {urgentTasks > 0 && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="flex items-center justify-between gap-3 pt-6">
+            <p className="text-sm">
+              <span className="font-semibold text-amber-400">{urgentTasks}</span> tarefa
+              {urgentTasks === 1 ? "" : "s"} para hoje ou atrasada{urgentTasks === 1 ? "" : "s"}
+            </p>
+            <Button asChild size="sm" variant="secondary">
+              <Link href="/tasks">Ver tarefas</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
@@ -241,10 +331,10 @@ export default async function DashboardPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-2">
-          <p>• Fase 3 — Produtos, vendas Kiwify/Kirvano e links rastreados</p>
-          <p>• Fase 4 — Scoring, IA de vendas e mensagens personalizadas</p>
-          <p>• Fase 5 — Pipeline kanban, Lucro e Metas gamificadas</p>
-          <p>• Fase 6 — Campanhas de e-mail e follow-up automático</p>
+          <p>• Fase 6 — Campanhas de e-mail, templates e follow-up automático</p>
+          <p>• Fase 7 — WhatsApp Business oficial e inbox unificada</p>
+          <p>• Fase 8 — Discovery: buscar empresas via Google Places</p>
+          <p>• Fase 9 — Analytics de conversão, billing e hardening final</p>
         </CardContent>
       </Card>
     </div>

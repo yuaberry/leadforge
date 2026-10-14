@@ -3,7 +3,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 
 import { getServiceDb } from "@/server/db/index";
-import { products } from "@/server/db/schema";
+import { organizations, products } from "@/server/db/schema";
 import {
   findSaleByExternalOrderId,
   getLinkTokenByToken,
@@ -11,6 +11,13 @@ import {
   updateSale,
 } from "@/server/db/repositories/commerce";
 import { recordActivity } from "@/server/db/repositories/leads";
+import {
+  addGoalContribution,
+  markGoalReachedIfDue,
+  reconcileSaleFinance,
+} from "@/server/db/repositories/crm";
+import { computeAutoContribution } from "@/server/services/goals";
+import { parseOrgSettings } from "@/validators/org";
 import { normalizeEmail } from "@/lib/format";
 import type { SaleEvent } from "@/server/providers/commerce/types";
 
@@ -22,6 +29,83 @@ export type IngestResult = {
 
 /** Padrão do utm_campaign gerado pelos links /go/[token]. */
 export const LINK_UTM_PREFIX = "lf_";
+
+/**
+ * Pós-processamento financeiro de uma venda (idempotente):
+ *  1. Reconcilia o lançamento de receita (paga) ou remove (refund/cancelada).
+ *  2. Alimenta a meta ativa com o % configurado (goal_contribution única por venda).
+ *  3. Marca a meta como atingida quando completa (celebração).
+ */
+async function postProcessSale(
+  db: ReturnType<typeof getServiceDb>,
+  input: {
+    organizationId: string;
+    saleId: string;
+    status: string;
+    amount: number | null;
+    commissionAmount: number | null;
+    productId: string | null;
+    platform: string;
+    externalOrderId: string;
+    occurredAt: string;
+  }
+): Promise<void> {
+  // tipo do produto define a categoria da receita
+  let productType: "own" | "affiliate" | null = null;
+  if (input.productId) {
+    const [product] = await db
+      .select({ type: products.type })
+      .from(products)
+      .where(eq(products.id, input.productId))
+      .limit(1);
+    productType = product?.type ?? null;
+  }
+
+  const isPaid = input.status === "paid";
+
+  await reconcileSaleFinance(db, {
+    saleId: input.saleId,
+    organizationId: input.organizationId,
+    isPaid,
+    amount: input.amount,
+    commissionAmount: input.commissionAmount,
+    productType,
+    platform: input.platform,
+    externalOrderId: input.externalOrderId,
+    occurredAt: input.occurredAt,
+  });
+
+  if (!isPaid) return;
+
+  // alocação automática para a meta configurada
+  const [orgRow] = await db
+    .select({ settings: organizations.settings })
+    .from(organizations)
+    .where(eq(organizations.id, input.organizationId))
+    .limit(1);
+  const settings = parseOrgSettings(orgRow?.settings);
+  const { autoAllocatePercent, targetGoalId } = settings.goalSettings;
+
+  if (autoAllocatePercent > 0 && targetGoalId) {
+    const contribution = computeAutoContribution(
+      autoAllocatePercent,
+      input.amount,
+      input.commissionAmount
+    );
+    if (contribution > 0) {
+      const result = await addGoalContribution(db, {
+        organizationId: input.organizationId,
+        goalId: targetGoalId,
+        amount: contribution,
+        source: "auto_sale",
+        saleId: input.saleId,
+      });
+      if (result.inserted) {
+        await markGoalReachedIfDue(db, input.organizationId, targetGoalId);
+      }
+    }
+  }
+}
 
 function extractLinkToken(utmCampaign: string | null): string | null {
   if (!utmCampaign || !utmCampaign.startsWith(LINK_UTM_PREFIX)) return null;
@@ -116,10 +200,35 @@ export async function ingestSaleEvent(input: {
       utm: event.utm,
       raw: input.rawPayload as Record<string, unknown>,
     });
+
+    await postProcessSale(db, {
+      organizationId: input.organizationId,
+      saleId: existing.id,
+      status: event.status,
+      amount: event.amount ?? existing.amount,
+      commissionAmount: event.commissionAmount ?? existing.commissionAmount,
+      productId: productId ?? existing.productId,
+      platform: input.platform,
+      externalOrderId: event.externalOrderId,
+      occurredAt: event.occurredAt ?? existing.occurredAt,
+    });
+
     return { saleId: existing.id, created: false, attributed: Boolean(validToken) };
   }
 
   const sale = await insertSale(db, saleValues);
+
+  await postProcessSale(db, {
+    organizationId: input.organizationId,
+    saleId: sale.id,
+    status: event.status,
+    amount: event.amount,
+    commissionAmount: event.commissionAmount,
+    productId,
+    platform: input.platform,
+    externalOrderId: event.externalOrderId,
+    occurredAt: event.occurredAt ?? sale.occurredAt,
+  });
 
   await recordActivity(db, {
     organizationId: input.organizationId,
