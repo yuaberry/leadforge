@@ -13,7 +13,7 @@ export default async function AppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || !process.env.DATABASE_URL) {
     return <ConfigPending />;
   }
 

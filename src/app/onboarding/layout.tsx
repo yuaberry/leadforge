@@ -10,7 +10,7 @@ export default function OnboardingLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() || !process.env.DATABASE_URL) {
     return <ConfigPending />;
   }
 

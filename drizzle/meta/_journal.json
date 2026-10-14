@@ -15,6 +15,20 @@
       "when": 1791936119180,
       "tag": "0001_rls_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791941398472,
+      "tag": "0002_curvy_dreadnoughts",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791941399872,
+      "tag": "0003_rls_policies_phase2",
+      "breakpoints": true
     }
   ]
 }

@@ -216,4 +216,73 @@ suite("RLS — isolamento entre tenants", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe(orgA);
   });
+
+  it("Phase 2: leads e companies de outra org são invisíveis e imutáveis", async () => {
+    const [companyA] = await service`
+      INSERT INTO public.companies (organization_id, name) VALUES (${orgA}, 'Empresa A') RETURNING id
+    `;
+    const [leadA] = await service`
+      INSERT INTO public.leads (organization_id, company_id, stage)
+      VALUES (${orgA}, ${companyA.id}, 'new') RETURNING id
+    `;
+    const [companyB] = await service`
+      INSERT INTO public.companies (organization_id, name) VALUES (${orgB}, 'Empresa B') RETURNING id
+    `;
+    const [leadB] = await service`
+      INSERT INTO public.leads (organization_id, company_id, stage)
+      VALUES (${orgB}, ${companyB.id}, 'new') RETURNING id
+    `;
+
+    // A vê apenas o lead da própria org
+    const rowsA = await asUser(idA, {}, (tx) => tx`SELECT id FROM public.leads`);
+    const idsA = rowsA.map((r) => String(r.id));
+    expect(idsA).toContain(leadA.id);
+    expect(idsA).not.toContain(leadB.id);
+
+    // A vê apenas a company da própria org
+    const companiesA = await asUser(idA, {}, (tx) => tx`SELECT id FROM public.companies`);
+    const companyIdsA = companiesA.map((r) => String(r.id));
+    expect(companyIdsA).toContain(companyA.id);
+    expect(companyIdsA).not.toContain(companyB.id);
+
+    // A não atualiza o lead do tenant B
+    const updateRes = await asUser(idA, {}, (tx) =>
+      tx`UPDATE public.leads SET stage = 'won' WHERE id = ${leadB.id}`
+    );
+    expect(updateRes.count).toBe(0);
+
+    // A não insere lead na org B (policy de insert)
+    await expect(
+      asUser(idA, {}, (tx) =>
+        tx`INSERT INTO public.leads (organization_id, stage) VALUES (${orgB}, 'new')`
+      )
+    ).rejects.toThrow(/row-level security/i);
+
+    // Sem membership alguma, C não vê nenhum lead (default deny)
+    const rowsC = await asUser(idC, {}, (tx) => tx`SELECT id FROM public.leads`);
+    expect(rowsC).toHaveLength(0);
+  });
+
+  it("Phase 2: dedup de leads é garantido por índice único (company × contact)", async () => {
+    const [contact] = await service`
+      INSERT INTO public.contacts (organization_id, full_name, email, email_normalized)
+      VALUES (${orgA}, 'Duplicado Silva', 'dup@test.local', 'dup@test.local') RETURNING id
+    `;
+
+    // primeira inserção ok
+    await asUser(idA, {}, (tx) =>
+      tx`INSERT INTO public.leads (organization_id, company_id, contact_id)
+         VALUES (${orgA}, NULL, ${contact.id})`
+    );
+
+    // segunda inserção com o mesmo par conflita (índice único parcial)
+    await expect(
+      asUser(idA, {}, (tx) =>
+        tx`INSERT INTO public.leads (organization_id, company_id, contact_id)
+           VALUES (${orgA}, NULL, ${contact.id})`
+      )
+    ).rejects.toThrow(/duplicate key|unique/i);
+
+    await service`DELETE FROM public.contacts WHERE id = ${contact.id}`;
+  });
 });
