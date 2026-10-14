@@ -20,6 +20,7 @@ export const metadata: Metadata = {
   description:
     "Plataforma de inteligência comercial e conquista financeira digital: venda produtos autorais ou de afiliado em escala, com IA, campanhas, lucro em tempo real e metas gamificadas.",
   keywords: ["prospecção", "afiliados", "produtos digitais", "CRM", "vendas", "IA"],
+  icons: { icon: "/icon.svg" },
 };
 
 export default function RootLayout({

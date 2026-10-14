@@ -1,0 +1,20 @@
+# LeadForge — self-host em um comando (Docker Desktop: Linux, macOS e Windows)
+# 1. cp .env.example .env.local  (preencha as credenciais do Supabase)
+# 2. docker compose up --build
+# 3. abra http://localhost:3000
+
+services:
+  leadforge:
+    build: .
+    container_name: leadforge
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    restart: unless-stopped
+
+# Nota: as migrations do banco rodam no host uma única vez:
+#   bun install && bun run db:migrate

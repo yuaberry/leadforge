@@ -1,0 +1,36 @@
+LEADFORGE — LICENÇA DE SOFTWARE
+Copyright © 2026 Yua Devs. Todos os direitos reservados.
+
+1. PROPRIEDADE
+   Este software e seu código-fonte são propriedade exclusiva da Yua Devs
+   ("Licenciante"). O código está publicado para fins de demonstração,
+   avaliação e transparência técnica.
+
+2. PERMISSÕES
+   É PERMITIDO:
+   - visualizar, estudar e avaliar o código-fonte;
+   - baixar e executar cópias para fins de avaliação pessoal;
+   - criar forks de referência com atribuição, SEM redistribuição.
+
+   É PROIBIDO, sem autorização por escrito do Licenciante:
+   - usar este software, no todo ou em parte, em ambiente de produção
+     comercial;
+   - redistribuir, sublicenciar, vender ou monetizar este software;
+   - remover avisos de copyright ou atribuições;
+   - usar marcas, nomes ou identidade visual do LeadForge.
+
+3. LICENÇAS COMERCIAIS
+   Licenças de uso comercial e implantação gerenciada estão disponíveis
+   mediante acordo. Contato: Yua Devs.
+
+4. COMPONENTES DE TERCEIROS
+   Este projeto depende de componentes de código aberto (Next.js, React,
+   Supabase, Drizzle ORM, Tailwind CSS, Radix UI, Recharts, Zod, Vitest e
+   outros) que permanecem sob suas respectivas licenças originais.
+
+5. GARANTIA
+   O SOFTWARE É FORNECIDO "NO ESTADO EM QUE SE ENCONTRA", SEM GARANTIAS DE
+   QUALQUER ESPÉCIE, EXPRESSAS OU IMPLÍCITAS.
+
+ESTE ARQUIVO NÃO CONSTITUI LICENÇA DE CÓDIGO ABERTO.
+Para licenciamento comercial, entre em contato com a Yua Devs.
