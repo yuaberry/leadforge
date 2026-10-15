@@ -1,0 +1,81 @@
+{
+  "name": "leadforge-desktop",
+  "version": "1.0.0",
+  "description": "LeadForge Desktop — Find. Qualify. Personalize. Convert.",
+  "main": "main.js",
+  "author": {
+    "name": "Yua Devs",
+    "email": "devs@yua.dev"
+  },
+  "homepage": "https://github.com/yuaberry/leadforge",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "build:linux": "electron-builder --linux --x64",
+    "build:win": "electron-builder --win --x64",
+    "build:mac": "electron-builder --mac --x64",
+    "build:all": "electron-builder --linux --win --mac"
+  },
+  "devDependencies": {
+    "dmg-license": "^1.0.11",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.yuadevs.leadforge",
+    "productName": "LeadForge",
+    "directories": {
+      "output": "build",
+      "buildResources": "icons"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**/*",
+      "icons/**/*"
+    ],
+    "icon": "icons/icon.png",
+    "linux": {
+      "target": [
+        {
+          "target": "deb",
+          "arch": ["x64"]
+        }
+      ],
+      "category": "Business",
+      "description": "LeadForge — Plataforma de inteligência comercial e conquista financeira digital",
+      "icon": "icons/icon.png"
+    },
+    "deb": {
+      "depends": ["libgtk-3-0", "libnss3", "libxss1", "libasound2"]
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icons/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "LeadForge"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64"]
+        }
+      ],
+      "category": "public.app-category.business",
+      "icon": "icons/icon.icns",
+      "identity": null
+    }
+  }
+}

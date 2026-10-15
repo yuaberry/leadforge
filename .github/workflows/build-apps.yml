@@ -1,0 +1,92 @@
+name: Build Desktop & Mobile Apps
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: Linux .deb
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm install
+      - name: Build .deb
+        working-directory: desktop
+        run: npx electron-builder --linux --x64
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: leadforge-linux
+          path: desktop/build/*.deb
+
+  windows:
+    name: Windows .exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm install
+      - name: Build .exe (NSIS installer)
+        working-directory: desktop
+        run: npx electron-builder --win --x64
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: leadforge-windows
+          path: desktop/build/*.exe
+
+  macos:
+    name: macOS .dmg
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm install
+      - name: Build .dmg
+        working-directory: desktop
+        run: npx electron-builder --mac --x64
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: leadforge-macos
+          path: desktop/build/*.dmg
+
+  release:
+    name: Publish Release
+    needs: [linux, windows, macos]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List files
+        run: find artifacts -type f | head -20
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/leadforge-linux/*.deb
+            artifacts/leadforge-windows/*.exe
+            artifacts/leadforge-macos/*.dmg
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

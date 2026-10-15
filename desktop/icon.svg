@@ -1,0 +1,18 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="lf-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0e17"/>
+      <stop offset="100%" stop-color="#121826"/>
+    </linearGradient>
+    <linearGradient id="lf-flame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="224" fill="url(#lf-bg)"/>
+  <rect x="64" y="64" width="896" height="896" rx="192" fill="url(#lf-flame)"/>
+  <path d="M512 224c90 128 122 198 122 264a122 122 0 0 1-244 0c0-66 32-136 122-264Z" fill="#ffffff"/>
+  <path d="M512 660v128" stroke="#ffffff" stroke-width="48" stroke-linecap="round"/>
+  <path d="M420 708l-32 60h248l-32-60" stroke="#ffffff" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
