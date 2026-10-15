@@ -8,6 +8,8 @@ import { runDiscovery } from "@/server/services/discovery";
 import { SourceProviderError } from "@/server/providers/sources/types";
 import { discoverySearchSchema } from "@/validators/discovery";
 import { parseOrgSettings } from "@/validators/org";
+import { assertWithinPlanLimit, planLimitMessage } from "@/server/services/usage";
+import { PlanLimitError } from "@/server/services/billing";
 
 type DiscoveryState =
   | { error?: string; success?: string; report?: Awaited<ReturnType<typeof runDiscovery>> }
@@ -32,16 +34,20 @@ export async function runDiscoveryAction(
 
   try {
     const report = await withTenantDb(ctx.accessToken, (db) =>
-      runDiscovery(db, {
-        organizationId: ctx.organization.id,
-        query: {
-          keyword: parsed.data.keyword,
-          location: parsed.data.location,
-          maxResults: parsed.data.maxResults,
-        },
-        orgCategories: settings.categories,
-        scoreWeights: settings.scoreWeights,
-      })
+      // limite de plano: cabe esta leva de leads?
+      assertWithinPlanLimit(db, ctx.organization.id, ctx.organization.plan, "leads", parsed.data.maxResults)
+        .then(() =>
+          runDiscovery(db, {
+            organizationId: ctx.organization.id,
+            query: {
+              keyword: parsed.data.keyword,
+              location: parsed.data.location,
+              maxResults: parsed.data.maxResults,
+            },
+            orgCategories: settings.categories,
+            scoreWeights: settings.scoreWeights,
+          })
+        )
     );
 
     revalidatePath("/companies");
@@ -53,6 +59,9 @@ export async function runDiscoveryAction(
       report,
     };
   } catch (erro) {
+    if (erro instanceof PlanLimitError) {
+      return { error: planLimitMessage(erro.metric, erro.limit) };
+    }
     if (erro instanceof SourceProviderError) {
       return { error: erro.message };
     }

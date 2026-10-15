@@ -20,6 +20,8 @@ import {
   updateMemberRoleSchema,
   type MemberRole,
 } from "@/validators/org";
+import { assertWithinPlanLimit, planLimitMessage } from "@/server/services/usage";
+import { PlanLimitError } from "@/server/services/billing";
 
 type MembersState = { error?: string; success?: string } | null;
 
@@ -162,8 +164,11 @@ export async function createInviteAction(
   }
 
   try {
-    await withTenantDb(ctx.accessToken, (db) =>
-      insertInvite(db, {
+    await withTenantDb(ctx.accessToken, async (db) => {
+      // limite de plano: usuários (o convite vira membro ao ser aceito)
+      await assertWithinPlanLimit(db, ctx.organization.id, ctx.organization.plan, "users");
+
+      await insertInvite(db, {
         organizationId: ctx.organization.id,
         role: parsed.data.role,
         email: parsed.data.email,
@@ -172,9 +177,12 @@ export async function createInviteAction(
         expiresAt: new Date(
           Date.now() + parsed.data.expiresInDays * 24 * 60 * 60 * 1000
         ).toISOString(),
-      })
-    );
+      });
+    });
   } catch (erro) {
+    if (erro instanceof PlanLimitError) {
+      return { error: planLimitMessage(erro.metric, erro.limit) };
+    }
     return {
       error: erro instanceof Error && erro.message.includes("row-level security")
         ? "Bloqueado pela política de segurança."

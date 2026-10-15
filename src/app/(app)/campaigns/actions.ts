@@ -22,6 +22,8 @@ import {
   processCampaignBatch,
 } from "@/server/services/campaign-runner";
 import { recordActivity } from "@/server/db/repositories/leads";
+import { assertWithinPlanLimit, planLimitMessage } from "@/server/services/usage";
+import { PlanLimitError } from "@/server/services/billing";
 import {
   addLeadsByFilterSchema,
   campaignControlSchema,
@@ -148,6 +150,22 @@ export async function setCampaignStatusAction(
     return { error: "Adicione pelo menos uma etapa antes de ativar." };
   }
 
+  if (parsed.data.status === "active") {
+    const fits = await withTenantDb(ctx.accessToken, async (db) => {
+      await assertWithinPlanLimit(
+        db,
+        ctx.organization.id,
+        ctx.organization.plan,
+        "activeCampaigns"
+      );
+      return true;
+    }).catch((erro: unknown) => {
+      if (erro instanceof PlanLimitError) return planLimitMessage(erro.metric, erro.limit);
+      throw erro;
+    });
+    if (fits !== true) return { error: String(fits) };
+  }
+
   await withTenantDb(ctx.accessToken, (db) =>
     updateCampaign(db, ctx.organization.id, parsed.data.campaignId, {
       status: parsed.data.status,
@@ -261,8 +279,16 @@ export async function processCampaignNowAction(
   let report;
   try {
     const origin = await appOrigin();
-    report = await withTenantDb(ctx.accessToken, (db) =>
-      processCampaignBatch(
+    report = await withTenantDb(ctx.accessToken, async (db) => {
+      // limite de plano: mensagens deste mês (budget da leva)
+      await assertWithinPlanLimit(
+        db,
+        ctx.organization.id,
+        ctx.organization.plan,
+        "messagesPerMonth",
+        20
+      );
+      return processCampaignBatch(
         db,
         {
           organizationId: ctx.organization.id,
@@ -270,9 +296,12 @@ export async function processCampaignNowAction(
           fromAddress,
         },
         campaignId
-      )
-    );
+      );
+    });
   } catch (erro) {
+    if (erro instanceof PlanLimitError) {
+      return { error: planLimitMessage(erro.metric, erro.limit) };
+    }
     return { error: erro instanceof Error ? erro.message : "Erro ao processar." };
   }
 

@@ -15,8 +15,6 @@ import { acceptInviteSchema } from "@/validators/org";
 
 type AcceptState = { error?: string } | null;
 
-type AcceptResult = { ok: false; error: string } | { ok: true; organizationId: string };
-
 export async function acceptInviteAction(
   _prev: AcceptState,
   formData: FormData
@@ -31,7 +29,7 @@ export async function acceptInviteAction(
   }
 
   try {
-    const result: AcceptResult = await withTenantDb(session.accessToken, async (db) => {
+    const result = await withTenantDb(session.accessToken, async (db) => {
       const record = await getInviteByToken(db, parsed.data.token);
       if (!record) return { ok: false, error: "Convite não encontrado." };
 
@@ -53,14 +51,14 @@ export async function acceptInviteAction(
       }
       await markInviteAccepted(db, invite.id, session.user.id);
 
-      return { ok: true, organizationId: invite.organizationId };
+      return { ok: true as const, organizationId: invite.organizationId };
     });
 
     if (!result.ok) {
       return { error: result.error };
     }
 
-    await setActiveOrgCookie(result.organizationId);
+    await setActiveOrgCookie(String(result.organizationId));
   } catch (erro) {
     return {
       error:

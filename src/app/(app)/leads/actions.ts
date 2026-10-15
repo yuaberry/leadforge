@@ -16,6 +16,8 @@ import {
   upsertLead,
 } from "@/server/db/repositories/leads";
 import { parseOrgSettings } from "@/validators/org";
+import { assertWithinPlanLimit, planLimitMessage } from "@/server/services/usage";
+import { PlanLimitError } from "@/server/services/billing";
 import {
   addLeadNoteSchema,
   addLeadTagSchema,
@@ -57,6 +59,9 @@ export async function createLeadAction(
   try {
     const settings = parseOrgSettings(ctx.organization.settings);
     const result = await withTenantDb(ctx.accessToken, async (db) => {
+      // limite de plano (leads)
+      await assertWithinPlanLimit(db, ctx.organization.id, ctx.organization.plan, "leads");
+
       const source = await getOrCreateSource(
         db,
         ctx.organization.id,
@@ -84,6 +89,9 @@ export async function createLeadAction(
       return { error: "Este lead já existe (deduplicado) — abrindo o existente." };
     }
   } catch (erro) {
+    if (erro instanceof PlanLimitError) {
+      return { error: planLimitMessage(erro.metric, erro.limit) };
+    }
     return {
       error: erro instanceof Error && erro.message.includes("row-level security")
         ? "Bloqueado pela política de segurança."

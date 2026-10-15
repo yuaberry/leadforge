@@ -27,6 +27,8 @@ import {
   saveDraftEditSchema,
   discardDraftSchema,
 } from "@/validators/scoring";
+import { assertWithinPlanLimit, planLimitMessage } from "@/server/services/usage";
+import { PlanLimitError } from "@/server/services/billing";
 
 type AIState = { error?: string; success?: string } | null;
 
@@ -88,6 +90,14 @@ export async function analyzeLeadAction(_prev: AIState, formData: FormData): Pro
 
   try {
     await withTenantDb(ctx.accessToken, async (db) => {
+      // limite de plano: análises de IA/mês
+      await assertWithinPlanLimit(
+        db,
+        ctx.organization.id,
+        ctx.organization.plan,
+        "aiAnalysesPerMonth"
+      );
+
       const input = await buildAnalysisInput(
         db,
         ctx.organization.id,
@@ -168,6 +178,9 @@ export async function analyzeLeadAction(_prev: AIState, formData: FormData): Pro
       });
     });
   } catch (erro) {
+    if (erro instanceof PlanLimitError) {
+      return { error: planLimitMessage(erro.metric, erro.limit) };
+    }
     const message =
       erro instanceof AIProviderError || erro instanceof Error
         ? erro.message

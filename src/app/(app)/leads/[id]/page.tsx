@@ -25,6 +25,7 @@ import { listProducts } from "@/server/db/repositories/commerce";
 import { withTenantDb } from "@/server/db/tenant";
 import { activeAIProviderKind } from "@/server/providers/ai";
 import { reanalyzeAction } from "./ai-actions";
+import { deleteLeadAction } from "./lgpd-actions";
 import { CLASSIFICATION_LABELS, type ScoreClassification } from "@/validators/scoring";
 
 export const metadata: Metadata = {
@@ -390,6 +391,41 @@ export default async function LeadProfilePage({
           </CardHeader>
           <CardContent>
             <NoteForm leadId={lead.lead.id} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Direitos LGPD</CardTitle>
+            <CardDescription>
+              Acesso e eliminação de dados do titular (Lei 13.709/2018).
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/api/export/leads?format=json">Exportar dados (JSON)</Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/api/export/leads?format=csv">Exportar (CSV)</Link>
+              </Button>
+            </div>
+            <form action={deleteLeadAction} className="pt-2">
+              <input type="hidden" name="leadId" value={lead.lead.id} />
+              <Button
+                type="submit"
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:bg-destructive/10"
+              >
+                Eliminar lead (direito ao esquecimento)
+              </Button>
+            </form>
+            <p className="text-[11px] text-muted-foreground/70">
+              Eliminar remove mensagens, conversas, campanhas e a timeline deste
+              lead — e o contato quando não pertence a outro lead. A ação é
+              registrada na auditoria.
+            </p>
           </CardContent>
         </Card>
 

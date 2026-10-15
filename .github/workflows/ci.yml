@@ -41,3 +41,6 @@ jobs:
           curl -fsS http://localhost:3000/ > /dev/null
           curl -fsS http://localhost:3000/login > /dev/null
           curl -fsS -o /dev/null http://localhost:3000/dashboard
+
+      - name: Secret scan
+        run: bash scripts/scan-secrets.sh
