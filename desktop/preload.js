@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('leadforge', {
-  setUrl: (url) => ipcRenderer.send('leadforge:set-url', url),
+  modeLocal: () => ipcRenderer.send('leadforge:mode-local'),
+  modeRemote: (url) => ipcRenderer.send('leadforge:mode-remote', url),
   platform: process.platform,
 });

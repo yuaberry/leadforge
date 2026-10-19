@@ -2,7 +2,6 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>LeadForge — Configurar</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -18,79 +17,107 @@
     }
     .container {
       text-align: center;
-      padding: 2rem;
-      max-width: 400px;
+      padding: 1.5rem 2rem;
+      max-width: 440px;
       -webkit-app-region: no-drag;
     }
     .logo {
-      width: 72px;
-      height: 72px;
-      border-radius: 18px;
+      width: 64px;
+      height: 64px;
+      border-radius: 16px;
       background: linear-gradient(135deg, #3b82f6, #8b5cf6, #22d3ee);
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 1.5rem;
-      font-size: 36px;
+      margin-bottom: 1rem;
+      font-size: 32px;
       font-weight: 800;
       color: white;
     }
-    h1 {
-      font-size: 1.5rem;
-      margin-bottom: 0.5rem;
-      letter-spacing: -0.02em;
-    }
-    p {
+    h1 { font-size: 1.4rem; letter-spacing: -0.02em; }
+    .subtitle {
       color: #64748b;
-      font-size: 0.875rem;
-      margin-bottom: 1.5rem;
-      line-height: 1.5;
+      font-size: 0.8rem;
+      margin-bottom: 1.8rem;
+    }
+    .option {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 16px;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      background: #121826;
+      margin-bottom: 12px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .option:hover {
+      border-color: #3b82f6;
+      background: #16203a;
+    }
+    .option-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #e8ecf4;
+    }
+    .option-desc {
+      font-size: 0.75rem;
+      color: #64748b;
+      margin-top: 4px;
+    }
+    .remote-section {
+      display: none;
+      margin-top: 0.5rem;
+    }
+    .remote-section.visible {
+      display: block;
     }
     input {
       width: 100%;
-      padding: 12px 16px;
+      padding: 12px 14px;
       border: 1px solid #1e293b;
       border-radius: 10px;
-      background: #121826;
+      background: #0a0e17;
       color: #e8ecf4;
-      font-size: 15px;
+      font-size: 14px;
       outline: none;
       transition: border-color 0.2s;
     }
-    input:focus {
-      border-color: #3b82f6;
-    }
-    input::placeholder {
-      color: #475569;
-    }
-    button {
+    input:focus { border-color: #3b82f6; }
+    input::placeholder { color: #475569; }
+    .btn {
       width: 100%;
-      margin-top: 1rem;
+      margin-top: 8px;
       padding: 12px 20px;
       background: linear-gradient(90deg, #3b82f6, #8b5cf6);
       color: white;
       border: none;
       border-radius: 10px;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 600;
       cursor: pointer;
-      transition: opacity 0.2s;
     }
-    button:hover {
-      opacity: 0.9;
+    .btn:hover { opacity: 0.9; }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid #1e293b;
+      color: #94a3b8;
+      margin-top: 8px;
     }
-    button:active {
-      opacity: 0.8;
+    .btn-secondary:hover {
+      border-color: #475569;
+      color: #e8ecf4;
     }
     .error {
       color: #f87171;
-      font-size: 0.8rem;
-      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      margin-top: 4px;
       display: none;
     }
     .hint {
-      margin-top: 1rem;
-      font-size: 0.75rem;
+      margin-top: 12px;
+      font-size: 0.7rem;
       color: #475569;
       line-height: 1.4;
     }
@@ -100,48 +127,74 @@
   <div class="container">
     <div class="logo">LF</div>
     <h1>LeadForge Desktop</h1>
-    <p>Digite o endereço do seu servidor LeadForge para começar.</p>
+    <p class="subtitle">Escolha como você quer conectar:</p>
 
-    <input
-      type="url"
-      id="serverUrl"
-      placeholder="https://seu-servidor.com.br"
-      autofocus
-      spellcheck="false"
-    />
-    <p class="error" id="error">Digite uma URL válida (começando com http)</p>
+    <!-- Opção Local -->
+    <div class="option" onclick="selectLocal()">
+      <div class="option-title">🖥️ Servidor local</div>
+      <div class="option-desc">
+        Inicia o LeadForge no seu computador (porta 4210).
+        Requer o projeto LeadForge instalado e o Supabase configurado.
+      </div>
+    </div>
 
-    <button onclick="connect()">Conectar</button>
+    <!-- Opção Remota -->
+    <div class="option" onclick="showRemote()">
+      <div class="option-title">🌐 Servidor remoto</div>
+      <div class="option-desc">
+        Conecta a uma instância LeadForge hospedada (ex.: Vercel, VPS).
+      </div>
+    </div>
+
+    <!-- Formulário remoto (aparece ao clicar) -->
+    <div class="remote-section" id="remoteSection">
+      <input
+        type="url"
+        id="serverUrl"
+        placeholder="https://seu-servidor.com.br"
+        spellcheck="false"
+      />
+      <p class="error" id="urlError">Digite uma URL válida (começando com http)</p>
+      <button class="btn" onclick="connectRemote()">Conectar</button>
+    </div>
+
+    <button class="btn btn-secondary" onclick="cancel()">Cancelar</button>
 
     <p class="hint">
-      Este app conecta à sua instância hospedada do LeadForge.
-      <br />
-      Se ainda não tem um servidor, siga o guia em
-      <a href="#" onclick="event.preventDefault(); require('electron').shell.openExternal('https://github.com/yuaberry/leadforge')" style="color:#3b82f6">github.com/yuaberry/leadforge</a>
+      O app verifica automaticamente se o servidor é o LeadForge
+      (via /api/health) antes de abrir — evita conectar em outra aplicação por engano.
     </p>
   </div>
 
   <script>
-    const input = document.getElementById('serverUrl');
-    const error = document.getElementById('error');
+    function selectLocal() {
+      window.leadforge.modeLocal();
+    }
 
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') connect();
-    });
+    function showRemote() {
+      document.getElementById('remoteSection').classList.add('visible');
+      document.getElementById('serverUrl').focus();
+    }
 
-    input.addEventListener('input', () => {
-      error.style.display = 'none';
-    });
-
-    function connect() {
+    function connectRemote() {
+      const input = document.getElementById('serverUrl');
       const url = input.value.trim();
       if (url && url.startsWith('http')) {
-        window.leadforge.setUrl(url);
+        window.leadforge.modeRemote(url);
       } else {
-        error.style.display = 'block';
+        document.getElementById('urlError').style.display = 'block';
         input.focus();
       }
     }
+
+    function cancel() {
+      // fecha sem fazer nada — o app sai
+      window.close();
+    }
+
+    document.getElementById('serverUrl').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') connectRemote();
+    });
   </script>
 </body>
 </html>
