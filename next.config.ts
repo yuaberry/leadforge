@@ -10,6 +10,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Saída standalone: server autocontido (server.js + node_modules rastreadas).
+  // É o que permite empacotar o LeadForge dentro do app desktop — o usuário
+  // instala o app e ele roda sem precisar de Node/Bun/clone do projeto.
+  output: "standalone",
   async headers() {
     return [
       {

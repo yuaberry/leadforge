@@ -10,165 +10,246 @@
       background: #0a0e17;
       color: #e8ecf4;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
       min-height: 100vh;
+      padding: 1.25rem;
       -webkit-app-region: drag;
     }
     .container {
-      text-align: center;
-      padding: 1.5rem 2rem;
-      max-width: 440px;
+      width: 100%;
+      max-width: 560px;
       -webkit-app-region: no-drag;
     }
     .logo {
-      width: 64px;
-      height: 64px;
-      border-radius: 16px;
+      width: 52px;
+      height: 52px;
+      border-radius: 14px;
       background: linear-gradient(135deg, #3b82f6, #8b5cf6, #22d3ee);
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      margin-bottom: 1rem;
-      font-size: 32px;
+      margin-bottom: 0.75rem;
+      font-size: 24px;
       font-weight: 800;
       color: white;
     }
-    h1 { font-size: 1.4rem; letter-spacing: -0.02em; }
-    .subtitle {
-      color: #64748b;
-      font-size: 0.8rem;
-      margin-bottom: 1.8rem;
-    }
+    h1 { font-size: 1.25rem; letter-spacing: -0.02em; }
+    .subtitle { color: #64748b; font-size: 0.78rem; margin-bottom: 1.25rem; line-height: 1.5; }
     .option {
       display: block;
       width: 100%;
       text-align: left;
-      padding: 16px;
+      padding: 14px 16px;
       border: 1px solid #1e293b;
       border-radius: 12px;
       background: #121826;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       cursor: pointer;
       transition: border-color 0.2s, background 0.2s;
     }
-    .option:hover {
-      border-color: #3b82f6;
-      background: #16203a;
-    }
-    .option-title {
-      font-size: 0.95rem;
-      font-weight: 600;
-      color: #e8ecf4;
-    }
-    .option-desc {
-      font-size: 0.75rem;
-      color: #64748b;
-      margin-top: 4px;
-    }
-    .remote-section {
-      display: none;
-      margin-top: 0.5rem;
-    }
-    .remote-section.visible {
-      display: block;
-    }
-    input {
+    .option:hover { border-color: #3b82f6; background: #16203a; }
+    .option.selected { border-color: #3b82f6; background: #16203a; }
+    .option-title { font-size: 0.9rem; font-weight: 600; color: #e8ecf4; }
+    .option-desc { font-size: 0.72rem; color: #64748b; margin-top: 4px; line-height: 1.45; }
+    .section { display: none; margin-top: 0.5rem; }
+    .section.visible { display: block; }
+    .field { margin-bottom: 0.75rem; }
+    label { display: block; font-size: 0.72rem; color: #94a3b8; margin-bottom: 4px; font-weight: 500; }
+    label .opt { color: #475569; font-weight: 400; }
+    input, textarea {
       width: 100%;
-      padding: 12px 14px;
+      padding: 9px 12px;
       border: 1px solid #1e293b;
-      border-radius: 10px;
+      border-radius: 9px;
       background: #0a0e17;
       color: #e8ecf4;
-      font-size: 14px;
+      font-size: 13px;
+      font-family: inherit;
       outline: none;
       transition: border-color 0.2s;
     }
-    input:focus { border-color: #3b82f6; }
-    input::placeholder { color: #475569; }
+    input:focus, textarea:focus { border-color: #3b82f6; }
+    input::placeholder, textarea::placeholder { color: #475569; }
+    textarea { resize: vertical; min-height: 62px; }
     .btn {
       width: 100%;
       margin-top: 8px;
-      padding: 12px 20px;
+      padding: 11px 20px;
       background: linear-gradient(90deg, #3b82f6, #8b5cf6);
       color: white;
       border: none;
       border-radius: 10px;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
+      font-family: inherit;
     }
     .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-secondary {
       background: transparent;
       border: 1px solid #1e293b;
       color: #94a3b8;
-      margin-top: 8px;
     }
-    .btn-secondary:hover {
-      border-color: #475569;
-      color: #e8ecf4;
+    .btn-secondary:hover { border-color: #475569; color: #e8ecf4; }
+    .error { color: #f87171; font-size: 0.72rem; margin-top: 4px; display: none; line-height: 1.4; }
+    .hint { margin-top: 12px; font-size: 0.68rem; color: #475569; line-height: 1.5; }
+    .hint code {
+      background: #121826; padding: 1px 5px; border-radius: 4px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.95em;
     }
-    .error {
-      color: #f87171;
-      font-size: 0.75rem;
-      margin-top: 4px;
-      display: none;
+    .divider { height: 1px; background: #1e293b; margin: 1rem 0; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 0.85rem; }
+    .tab {
+      flex: 1; padding: 7px; font-size: 0.72rem; text-align: center;
+      border: 1px solid #1e293b; border-radius: 8px; color: #64748b;
+      cursor: pointer; background: #0f1420; font-weight: 500;
     }
-    .hint {
-      margin-top: 12px;
-      font-size: 0.7rem;
-      color: #475569;
-      line-height: 1.4;
-    }
+    .tab.active { border-color: #3b82f6; color: #e8ecf4; background: #16203a; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="logo">LF</div>
     <h1>LeadForge Desktop</h1>
-    <p class="subtitle">Escolha como você quer conectar:</p>
+    <p class="subtitle" id="subtitle">
+      Configure como o LeadForge deve se conectar. Tudo fica salvo apenas no seu computador.
+    </p>
 
-    <!-- Opção Local -->
-    <div class="option" onclick="selectLocal()">
-      <div class="option-title">🖥️ Servidor local</div>
-      <div class="option-desc">
-        Inicia o LeadForge no seu computador (porta 4210).
-        Requer o projeto LeadForge instalado e o Supabase configurado.
+    <!-- ============ MODO LOCAL ============ -->
+    <div id="localBlock">
+      <div class="option selected" onclick="selectLocal()">
+        <div class="option-title">🖥️ Servidor local (recomendado)</div>
+        <div class="option-desc">
+          Roda o LeadForge dentro do próprio app, no seu computador (porta 4210).
+          Funciona offline, sem depender de hospedagem.
+        </div>
+      </div>
+
+      <div class="section visible" id="localSection">
+        <div class="tabs">
+          <div class="tab active" onclick="showTab('tab-required', this)">Obrigatório</div>
+          <div class="tab" onclick="showTab('tab-optional', this)">Integrações</div>
+        </div>
+
+        <!-- Obrigatório -->
+        <div id="tab-required">
+          <div class="field">
+            <label>URL do Supabase <span class="opt">(Project Settings → API → Project URL)</span></label>
+            <input id="supabaseUrl" type="url" placeholder="https://SEU-PROJETO.supabase.co" spellcheck="false" />
+            <p class="error" id="err-supabaseUrl">Informe a URL do seu projeto Supabase.</p>
+          </div>
+          <div class="field">
+            <label>Chave anônima <span class="opt">(Project Settings → API → anon public)</span></label>
+            <input id="supabaseAnonKey" type="text" placeholder="eyJhbGciOi..." spellcheck="false" />
+            <p class="error" id="err-supabaseAnonKey">Informe a chave anônima do Supabase.</p>
+          </div>
+          <div class="field">
+            <label>DATABASE_URL <span class="opt">(Project Settings → Database → URI, modo transaction)</span></label>
+            <textarea id="databaseUrl" placeholder="postgresql://postgres.PROJETO:[SENHA]@aws-0-sao-paulo-1.pooler.supabase.com:6543/postgres" spellcheck="false"></textarea>
+            <p class="error" id="err-databaseUrl">Informe a DATABASE_URL do seu Supabase.</p>
+          </div>
+          <div class="field">
+            <label>Service role key <span class="opt">(opcional — usada por captura pública e webhooks)</span></label>
+            <input id="supabaseServiceRoleKey" type="text" placeholder="eyJhbGciOi..." spellcheck="false" />
+          </div>
+          <p class="hint">
+            Suas chaves ficam somente neste computador, em arquivo com permissão restrita.
+            Nada é enviado ao Yua Devs. As migrations do banco devem estar aplicadas —
+            veja <code>docs/DEPLOYMENT.md</code>.
+          </p>
+        </div>
+
+        <!-- Integrações -->
+        <div id="tab-optional" style="display:none">
+          <div class="field">
+            <label>E-mail — Resend API key <span class="opt">(opcional — sem isso o envio é simulado)</span></label>
+            <input id="resendApiKey" type="text" placeholder="re_..." spellcheck="false" />
+          </div>
+          <div class="field">
+            <label>E-mail — remetente</label>
+            <input id="emailFrom" type="text" placeholder="LeadForge <ola@suaempresa.com.br>" spellcheck="false" />
+          </div>
+          <div class="field">
+            <label>IA — OpenRouter API key <span class="opt">(opcional — sem isso a IA é determinística)</span></label>
+            <input id="openrouterApiKey" type="text" placeholder="sk-or-v1-..." spellcheck="false" />
+          </div>
+          <div class="field">
+            <label>Discovery — Google Places API key</label>
+            <input id="googlePlacesApiKey" type="text" placeholder="AIza..." spellcheck="false" />
+          </div>
+          <div class="field">
+            <label>WhatsApp — token da Meta</label>
+            <input id="whatsappToken" type="text" placeholder="EAAG..." spellcheck="false" />
+          </div>
+          <div class="field">
+            <label>WhatsApp — Phone Number ID</label>
+            <input id="whatsappPhoneNumberId" type="text" placeholder="123456789012345" spellcheck="false" />
+          </div>
+        </div>
+
+        <button class="btn" id="btnLocal" onclick="startLocal()">Iniciar LeadForge</button>
+        <button class="btn btn-secondary" onclick="cancel()">Cancelar</button>
       </div>
     </div>
 
-    <!-- Opção Remota -->
+    <div class="divider"></div>
+
+    <!-- ============ MODO REMOTO ============ -->
     <div class="option" onclick="showRemote()">
       <div class="option-title">🌐 Servidor remoto</div>
       <div class="option-desc">
-        Conecta a uma instância LeadForge hospedada (ex.: Vercel, VPS).
+        Conecta a uma instância LeadForge hospedada (ex.: Vercel, VPS, sua empresa).
       </div>
     </div>
 
-    <!-- Formulário remoto (aparece ao clicar) -->
-    <div class="remote-section" id="remoteSection">
-      <input
-        type="url"
-        id="serverUrl"
-        placeholder="https://seu-servidor.com.br"
-        spellcheck="false"
-      />
-      <p class="error" id="urlError">Digite uma URL válida (começando com http)</p>
+    <div class="section" id="remoteSection">
+      <div class="field">
+        <input id="serverUrl" type="url" placeholder="https://seu-servidor.com.br" spellcheck="false" />
+        <p class="error" id="err-serverUrl">Digite uma URL válida (começando com http).</p>
+      </div>
       <button class="btn" onclick="connectRemote()">Conectar</button>
     </div>
 
-    <button class="btn btn-secondary" onclick="cancel()">Cancelar</button>
-
     <p class="hint">
-      O app verifica automaticamente se o servidor é o LeadForge
-      (via /api/health) antes de abrir — evita conectar em outra aplicação por engano.
+      O app verifica automaticamente se o servidor é o LeadForge (via <code>/api/health</code>)
+      antes de abrir — evita conectar em outra aplicação por engano.
     </p>
   </div>
 
   <script>
+    const CONFIG_FIELDS = [
+      'supabaseUrl', 'supabaseAnonKey', 'supabaseServiceRoleKey', 'databaseUrl',
+      'resendApiKey', 'emailFrom', 'openrouterApiKey', 'googlePlacesApiKey',
+      'whatsappToken', 'whatsappPhoneNumberId',
+    ];
+
+    function showTab(id, el) {
+      document.getElementById('tab-required').style.display = id === 'tab-required' ? '' : 'none';
+      document.getElementById('tab-optional').style.display = id === 'tab-optional' ? '' : 'none';
+      document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    function showError(id, show) {
+      const el = document.getElementById('err-' + id);
+      if (el) el.style.display = show ? 'block' : 'none';
+    }
+
+    function collectConfig() {
+      const cfg = {};
+      for (const field of CONFIG_FIELDS) {
+        const el = document.getElementById(field);
+        if (el && el.value.trim()) cfg[field] = el.value.trim();
+      }
+      return cfg;
+    }
+
     function selectLocal() {
-      window.leadforge.modeLocal();
+      document.getElementById('localSection').classList.add('visible');
+      document.getElementById('remoteSection').classList.remove('visible');
+      document.getElementById('btnLocal').focus();
     }
 
     function showRemote() {
@@ -176,19 +257,42 @@
       document.getElementById('serverUrl').focus();
     }
 
+    function startLocal() {
+      const cfg = collectConfig();
+      let valid = true;
+
+      if (!cfg.supabaseUrl || !/^https?:\/\//.test(cfg.supabaseUrl)) {
+        showError('supabaseUrl', true); valid = false;
+      } else showError('supabaseUrl', false);
+
+      if (!cfg.supabaseAnonKey) {
+        showError('supabaseAnonKey', true); valid = false;
+      } else showError('supabaseAnonKey', false);
+
+      if (!cfg.databaseUrl || !/^postgres(ql)?:\/\//.test(cfg.databaseUrl)) {
+        showError('databaseUrl', true); valid = false;
+      } else showError('databaseUrl', false);
+
+      if (!valid) return;
+
+      const btn = document.getElementById('btnLocal');
+      btn.disabled = true;
+      btn.textContent = 'Iniciando...';
+      window.leadforge.modeLocal(cfg);
+    }
+
     function connectRemote() {
-      const input = document.getElementById('serverUrl');
-      const url = input.value.trim();
-      if (url && url.startsWith('http')) {
+      const url = document.getElementById('serverUrl').value.trim();
+      if (url && /^https?:\/\//.test(url)) {
+        showError('serverUrl', false);
         window.leadforge.modeRemote(url);
       } else {
-        document.getElementById('urlError').style.display = 'block';
-        input.focus();
+        showError('serverUrl', true);
+        document.getElementById('serverUrl').focus();
       }
     }
 
     function cancel() {
-      // fecha sem fazer nada — o app sai
       window.close();
     }
 
