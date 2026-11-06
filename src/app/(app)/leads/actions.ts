@@ -79,6 +79,10 @@ export async function createLeadAction(
           actorId: ctx.user.id,
           orgCategories: settings.categories,
           scoreWeights: settings.scoreWeights,
+          // Cadastro manual de lead = interesse legítimo para contato comercial B2B,
+          // com opt-out e suppression list garantidos (gate de elegibilidade continua ativo).
+          legalBasis: "legitimate_interest",
+          consentStatus: "unknown",
         }
       );
       return { leadId: lead.id, created };

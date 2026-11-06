@@ -1,7 +1,7 @@
 import "server-only";
 
-import { and, asc, count, desc, eq, lte, sql } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { and, asc, count, desc, eq, inArray, lte, sql } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as schema from "@/server/db/schema";
 import {
@@ -13,8 +13,9 @@ import {
 } from "@/server/db/schema";
 import { products } from "@/server/db/schema";
 import type { TenantDb } from "@/server/db/tenant";
+import { isUniqueViolation } from "@/server/db/errors";
 
-type AnyDb = NodePgDatabase<typeof schema>;
+type AnyDb = PostgresJsDatabase<typeof schema>;
 
 // ---------- Deals (pipeline) ----------
 
@@ -267,18 +268,45 @@ export async function revenueByProduct(db: AnyDb, organizationId: string) {
 
 // ---------- Metas ----------
 
+/**
+ * Lista as metas com o total já contribuído.
+ *
+ * ⚠️ A soma é calculada em uma query separada (e não em subquery SQL cru):
+ *    no `sql` cru o Drizzle renderiza a coluna SEM a tabela, e "id" dentro
+ *    da subquery passava a resolver para goal_contributions.id — a soma
+ *    vinha sempre 0 e as metas nunca mostravam quanto já foi juntado.
+ */
 export async function listGoals(db: AnyDb, organizationId: string) {
-  return db
-    .select({
-      goal: goals,
-      contributed: sql<number>`coalesce((
-        select sum(${goalContributions.amount}) from ${goalContributions}
-        where ${goalContributions.goalId} = ${goals.id}
-      ), 0)`.mapWith(Number),
-    })
+  const goalRows = await db
+    .select()
     .from(goals)
     .where(eq(goals.organizationId, organizationId))
     .orderBy(asc(goals.createdAt));
+
+  if (goalRows.length === 0) return [];
+
+  const totals = await db
+    .select({
+      goalId: goalContributions.goalId,
+      total: sql<number>`coalesce(sum(${goalContributions.amount}), 0)`.mapWith(Number),
+    })
+    .from(goalContributions)
+    .where(
+      and(
+        eq(goalContributions.organizationId, organizationId),
+        inArray(
+          goalContributions.goalId,
+          goalRows.map((goal) => goal.id)
+        )
+      )
+    )
+    .groupBy(goalContributions.goalId);
+
+  const totalByGoal = new Map(totals.map((row) => [row.goalId, Number(row.total)]));
+  return goalRows.map((goal) => ({
+    goal,
+    contributed: totalByGoal.get(goal.id) ?? 0,
+  }));
 }
 
 export async function insertGoal(
@@ -328,7 +356,7 @@ export async function addGoalContribution(
     return { inserted: true };
   } catch (erro) {
     // violação do índice único (goal, sale) → contribuição já existente
-    if ((erro as { code?: string }).code === "23505") {
+    if (isUniqueViolation(erro)) {
       return { inserted: false };
     }
     throw erro;
@@ -360,20 +388,29 @@ export async function markGoalReachedIfDue(
   goalId: string
 ): Promise<boolean> {
   const [row] = await db
-    .select({
-      target: goals.targetAmount,
-      contributed: sql<number>`coalesce((
-        select sum(${goalContributions.amount}) from ${goalContributions}
-        where ${goalContributions.goalId} = ${goals.id}
-      ), 0)`.mapWith(Number),
-      status: goals.status,
-    })
+    .select({ target: goals.targetAmount, status: goals.status })
     .from(goals)
     .where(and(eq(goals.organizationId, organizationId), eq(goals.id, goalId)))
     .limit(1);
 
   if (!row) return false;
-  if (row.contributed >= row.target && row.status !== "reached") {
+
+  // Soma em query separada: em `sql` cru a coluna sai sem a tabela e a
+  // comparação interna usava goal_contributions.id no lugar de goals.id —
+  // a soma era 0 e a meta NUNCA era marcada como atingida.
+  const [sumRow] = await db
+    .select({ total: sql<number>`coalesce(sum(${goalContributions.amount}), 0)`.mapWith(Number) })
+    .from(goalContributions)
+    .where(
+      and(
+        eq(goalContributions.organizationId, organizationId),
+        eq(goalContributions.goalId, goalId)
+      )
+    );
+
+  const contributed = Number(sumRow?.total ?? 0);
+
+  if (contributed >= row.target && row.status !== "reached") {
     await db
       .update(goals)
       .set({ status: "reached", reachedAt: new Date().toISOString() })

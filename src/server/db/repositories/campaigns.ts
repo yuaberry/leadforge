@@ -1,7 +1,7 @@
 import "server-only";
 
 import { and, asc, count, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as schema from "@/server/db/schema";
 import {
@@ -14,26 +14,65 @@ import {
 } from "@/server/db/schema";
 import type { TenantDb } from "@/server/db/tenant";
 
-type AnyDb = NodePgDatabase<typeof schema>;
+type AnyDb = PostgresJsDatabase<typeof schema>;
 
 // ---------- Campaigns ----------
 
+/**
+ * Lista as campanhas com os contadores de leads e mensagens enviadas.
+ *
+ * ⚠️ Os contadores vêm de queries separadas: em `sql` cru o Drizzle renderiza
+ *    a coluna SEM a tabela, e "id" dentro da subquery resolvia para a tabela
+ *    interna — os contadores saíam sempre 0 na lista de campanhas.
+ */
 export async function listCampaigns(db: AnyDb, organizationId: string) {
-  return db
-    .select({
-      campaign: campaigns,
-      leadsCount: sql<number>`(
-        select count(*) from ${campaignLeads}
-        where ${campaignLeads.campaignId} = ${campaigns.id}
-      )`.mapWith(Number),
-      messagesSent: sql<number>`(
-        select count(*) from ${messages}
-        where ${messages.campaignId} = ${campaigns.id} and ${messages.status} in ('sent','delivered')
-      )`.mapWith(Number),
-    })
+  const campaignRows = await db
+    .select()
     .from(campaigns)
     .where(eq(campaigns.organizationId, organizationId))
     .orderBy(desc(campaigns.createdAt));
+
+  if (campaignRows.length === 0) return [];
+
+  const campaignIds = campaignRows.map((campaign) => campaign.id);
+
+  const leadsCounts = await db
+    .select({
+      campaignId: campaignLeads.campaignId,
+      total: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(campaignLeads)
+    .where(
+      and(
+        eq(campaignLeads.organizationId, organizationId),
+        inArray(campaignLeads.campaignId, campaignIds)
+      )
+    )
+    .groupBy(campaignLeads.campaignId);
+
+  const sentCounts = await db
+    .select({
+      campaignId: messages.campaignId,
+      total: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.organizationId, organizationId),
+        inArray(messages.campaignId, campaignIds),
+        or(eq(messages.status, "sent"), eq(messages.status, "delivered"))
+      )
+    )
+    .groupBy(messages.campaignId);
+
+  const leadsByCampaign = new Map(leadsCounts.map((row) => [row.campaignId, Number(row.total)]));
+  const sentByCampaign = new Map(sentCounts.map((row) => [row.campaignId, Number(row.total)]));
+
+  return campaignRows.map((campaign) => ({
+    campaign,
+    leadsCount: leadsByCampaign.get(campaign.id) ?? 0,
+    messagesSent: sentByCampaign.get(campaign.id) ?? 0,
+  }));
 }
 
 export async function getCampaign(db: AnyDb, organizationId: string, campaignId: string) {

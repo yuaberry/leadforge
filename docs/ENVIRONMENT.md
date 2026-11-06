@@ -42,3 +42,49 @@ Sem a chave do provedor, o LeadForge **não quebra** — ele opera com dados
 fictícios determinísticos claramente marcados na UI ("modo demonstração"):
 IA, e-mail, WhatsApp e Google Places. Você valida o fluxo completo hoje e
 liga cada um quando quiser.
+
+---
+
+## Ambiente local de testes (offline, sem credenciais reais)
+
+Para rodar E2E e suíte RLS sem um projeto Supabase provisionado, use o
+harness local de testes:
+
+| Componente | Porta | Como sobe |
+|---|---|---|
+| Postgres 16 (container `lf-pg-test`) | 54329 | `docker run --name lf-pg-test -e POSTGRES_PASSWORD=lfpass -p 54329:5432 -d postgres:16` |
+| Mock Supabase Auth (GoTrue-compatível) | 54399 | `bun run scripts/mock-supabase-auth.ts` (node:http, registra em `auth.users`) |
+
+Bootstrap do banco: `scripts/local-postgres-bootstrap.sql` (cria schema,
+tabelas, RLS, políticas e trigger `organizations.created_by`).
+
+Arquivo de ambiente de teste (não versionado, fonte em `/tmp/lf-test.env`):
+```
+NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54399
+NEXT_PUBLIC_SUPABASE_ANON_KEY=local-anon-key
+SUPABASE_SERVICE_ROLE_KEY=local-service-role-key
+DATABASE_URL=postgresql://postgres:lfpass@localhost:54329/leadforge
+NEXT_PUBLIC_APP_URL=http://localhost:4210
+APP_ENCRYPTION_KEY=bG9jYWwtbG9jYWwtbG9jYWwtbG9jYWwxMjM=
+LINK_TOKEN_SECRET=local-link-token-secret-0123456789abcdef
+CRON_SECRET=local-cron-secret
+```
+Use: `set -a; . /tmp/lf-test.env; set +a` (ou `source`) antes de build/start/test.
+
+E2E dispatch (navegador real, Chrome via Playwright 1.49.1, sem download de Chromium):
+```
+E2E_BASE_URL=http://localhost:4210 bun run scripts/e2e-dispatch.ts
+```
+Exercita: signup → onboarding (org sob RLS) → produto → lead → campanha
+manual (pending_approval → aprovar → sent) → campanha automatizada (sent)
+→ gate de supressão (suprimido = 0 mensagens). Requer `DATABASE_URL` e o
+servidor Next rodando (porta 4210 por padrão).
+
+Vitest (suíte RLS): precisa de `DATABASE_URL` definido ou os testes
+integração ficam dormentes (skipIf):
+```
+bun run test   # com DATABASE_URL no ambiente
+```
+
+**Segurança:** nunca commite credenciais reais. O `.env.local` de produção
+não entra no repositório; use apenas as variáveis locais de teste acima.

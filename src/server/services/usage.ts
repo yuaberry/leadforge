@@ -1,14 +1,14 @@
 import "server-only";
 
 import { and, count, eq, gte } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as schema from "@/server/db/schema";
 import { campaigns, conversationMessages, leads, messages } from "@/server/db/schema";
 import { commerceIntegrations, emailAccounts, whatsappAccounts, leadAnalyses, organizationMembers } from "@/server/db/schema";
 import { fitsInLimit, getPlan, PlanLimitError, type UsageMetric } from "@/server/services/billing";
 
-type AnyDb = NodePgDatabase<typeof schema>;
+type AnyDb = PostgresJsDatabase<typeof schema>;
 
 export type Usage = Record<UsageMetric, number>;
 

@@ -1,13 +1,13 @@
 import "server-only";
 
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as schema from "@/server/db/schema";
 import { getOrCreateSource, upsertCompany, upsertCompanyLead } from "@/server/db/repositories/leads";
 import { getSourceProvider } from "@/server/providers/sources";
 import type { CompanySearchQuery } from "@/server/providers/sources/types";
 
-type AnyDb = NodePgDatabase<typeof schema>;
+type AnyDb = PostgresJsDatabase<typeof schema>;
 
 export type DiscoveryReport = {
   provider: "google_places" | "mock";

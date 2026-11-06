@@ -28,6 +28,9 @@ suite("RLS — isolamento entre tenants", () => {
   const idA = randomUUID();
   const idB = randomUUID();
   const idC = randomUUID();
+  // Usuário SEM nenhuma membership — usado para provar o default deny.
+  // Não pode ser o idC: o teste de convite adiciona o idC como member da Org A.
+  const idD = randomUUID();
   let orgA: string;
   let orgB: string;
   const createdOrgIds: string[] = [];
@@ -53,6 +56,11 @@ suite("RLS — isolamento entre tenants", () => {
   beforeAll(async () => {
     service = postgres(DATABASE_URL as string, { max: 5 });
 
+    // Segredos de runtime usados pela suíte (link de unsubscribe/criptografia).
+    // Valores fixos e locais — nunca de produção.
+    process.env.LINK_TOKEN_SECRET ||= "test-link-token-secret-0123456789abcdef";
+    process.env.APP_ENCRYPTION_KEY ||= "dGVzdC1rZXktMzItYnl0ZXMtZm9yLXRlc3RzLW9ubHk=";
+
     // Seed direto como owner (bypassa RLS; o trigger de org não cria
     // membership porque auth.uid() é null nesta conexão).
     await service`
@@ -60,7 +68,8 @@ suite("RLS — isolamento entre tenants", () => {
       VALUES
         (${idA}, 'User A', 'a@test.local'),
         (${idB}, 'User B', 'b@test.local'),
-        (${idC}, 'User C', 'c@test.local')
+        (${idC}, 'User C', 'c@test.local'),
+        (${idD}, 'User D', 'd@test.local')
     `;
 
     const [rowA] = await service`
@@ -90,7 +99,7 @@ suite("RLS — isolamento entre tenants", () => {
       for (const orgId of createdOrgIds) {
         await service`DELETE FROM public.organizations WHERE id = ${orgId}`;
       }
-      await service`DELETE FROM public.users WHERE id IN (${idA}, ${idB}, ${idC})`;
+      await service`DELETE FROM public.users WHERE id IN (${idA}, ${idB}, ${idC}, ${idD})`;
       await service.end({ timeout: 5 });
     }
   });
@@ -217,6 +226,27 @@ suite("RLS — isolamento entre tenants", () => {
     expect(rows[0].id).toBe(orgA);
   });
 
+  it("withTenantDb aceita um ACCESS TOKEN JWT real (claims decodificadas do payload)", async () => {
+    const { withTenantDb } = await import("@/server/db/tenant");
+    const { organizations } = await import("@/server/db/schema");
+
+    // JWT no formato do Supabase: header.payload.signature (payload em base64url).
+    // É exatamente o que `session.access_token` entrega em produção.
+    const payload = Buffer.from(
+      JSON.stringify({ sub: idA, role: "authenticated", email: "a@test.local" })
+    ).toString("base64url");
+    const accessToken = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${payload}.assinatura-fake`;
+
+    const rows = await withTenantDb(accessToken, async (db) => {
+      return await db.select().from(organizations);
+    });
+
+    // Se as claims não fossem decodificadas, auth.uid() retornaria NULL
+    // (RLS negaria tudo) ou o cast ::jsonb do Supabase quebraria a query.
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(orgA);
+  });
+
   it("Phase 2: leads e companies de outra org são invisíveis e imutáveis", async () => {
     const [companyA] = await service`
       INSERT INTO public.companies (organization_id, name) VALUES (${orgA}, 'Empresa A') RETURNING id
@@ -258,9 +288,9 @@ suite("RLS — isolamento entre tenants", () => {
       )
     ).rejects.toThrow(/row-level security/i);
 
-    // Sem membership alguma, C não vê nenhum lead (default deny)
-    const rowsC = await asUser(idC, {}, (tx) => tx`SELECT id FROM public.leads`);
-    expect(rowsC).toHaveLength(0);
+    // Sem membership alguma, D não vê nenhum lead (default deny)
+    const rowsD = await asUser(idD, {}, (tx) => tx`SELECT id FROM public.leads`);
+    expect(rowsD).toHaveLength(0);
   });
 
   it("Phase 2: dedup de leads é garantido por índice único (company × contact)", async () => {
@@ -355,7 +385,7 @@ suite("RLS — isolamento entre tenants", () => {
     `;
     await service`
       UPDATE public.organizations
-      SET settings = jsonb_build_object('goalSettings', jsonb_build_object('autoAllocatePercent', 50, 'targetGoalId', ${goal.id}))
+      SET settings = jsonb_build_object('goalSettings', jsonb_build_object('autoAllocatePercent', 50, 'targetGoalId', ${goal.id}::text))
       WHERE id = ${orgA}
     `;
 
@@ -422,6 +452,77 @@ suite("RLS — isolamento entre tenants", () => {
     await markGoalReachedIfDue(db, orgA, goal.id);
     const [reached] = await service`SELECT status FROM public.goals WHERE id = ${goal.id}`;
     expect(reached.status).toBe("reached");
+  });
+
+  it("Phase 5: contadores das listagens refletem o banco (metas, campanhas, produtos)", async () => {
+    // Regressão: as listagens usavam subquery SQL cru onde a coluna saía
+    // sem o nome da tabela ("id" resolvia para a tabela interna) — a meta
+    // mostrava R$ 0 contribuído, a campanha 0 leads/0 mensagens e o produto
+    // 0 vendas, mesmo com os dados no banco.
+    const { listGoals } = await import("@/server/db/repositories/crm");
+    const { listCampaigns } = await import("@/server/db/repositories/campaigns");
+    const { listProducts } = await import("@/server/db/repositories/commerce");
+    const { getServiceDb } = await import("@/server/db/index");
+    const db = getServiceDb();
+
+    // --- meta com contribuição ---
+    const [goal] = await service`
+      INSERT INTO public.goals (organization_id, name, target_amount)
+      VALUES (${orgA}, 'Meta dos Contadores', 1000) RETURNING id
+    `;
+    await service`
+      INSERT INTO public.goal_contributions (organization_id, goal_id, amount, source)
+      VALUES (${orgA}, ${goal.id}, 250, 'manual')
+    `;
+
+    const goalsList = await listGoals(db, orgA);
+    const listedGoal = goalsList.find((row) => row.goal.id === goal.id);
+    expect(listedGoal).toBeDefined();
+    expect(Number(listedGoal?.contributed)).toBe(250);
+
+    // --- campanha com leads e mensagens enviadas ---
+    const [campaign] = await service`
+      INSERT INTO public.campaigns (organization_id, name, mode, status)
+      VALUES (${orgA}, 'Campanha Contadores', 'automated', 'active') RETURNING id
+    `;
+    const [contact] = await service`
+      INSERT INTO public.contacts (organization_id, full_name, email, email_normalized)
+      VALUES (${orgA}, 'Contador Silva', 'contador@test.local', 'contador@test.local')
+      RETURNING id
+    `;
+    const [lead] = await service`
+      INSERT INTO public.leads (organization_id, contact_id) VALUES (${orgA}, ${contact.id})
+      RETURNING id
+    `;
+    await service`
+      INSERT INTO public.campaign_leads (organization_id, campaign_id, lead_id, status)
+      VALUES (${orgA}, ${campaign.id}, ${lead.id}, 'active')
+    `;
+    await service`
+      INSERT INTO public.messages (organization_id, lead_id, campaign_id, channel, direction, to_address, body, status, sent_at)
+      VALUES (${orgA}, ${lead.id}, ${campaign.id}, 'email', 'outbound', 'contador@test.local', 'Oi', 'sent', now())
+    `;
+
+    const campaignsList = await listCampaigns(db, orgA);
+    const listedCampaign = campaignsList.find((row) => row.campaign.id === campaign.id);
+    expect(listedCampaign).toBeDefined();
+    expect(listedCampaign?.leadsCount).toBe(1);
+    expect(listedCampaign?.messagesSent).toBe(1);
+
+    // --- produto com venda paga ---
+    const [product] = await service`
+      INSERT INTO public.products (organization_id, name, type, platform, checkout_url)
+      VALUES (${orgA}, 'Produto Contador', 'affiliate', 'kiwify', 'https://exemplo.test/ct') RETURNING id
+    `;
+    await service`
+      INSERT INTO public.sales (organization_id, product_id, platform, external_order_id, status, amount)
+      VALUES (${orgA}, ${product.id}, 'kiwify', 'ord_contadores_1', 'paid', 197)
+    `;
+
+    const productsList = await listProducts(db, orgA);
+    const listedProduct = productsList.find((row) => row.product.id === product.id);
+    expect(listedProduct).toBeDefined();
+    expect(listedProduct?.salesCount).toBe(1);
   });
 
   it("Phase 6 (gate): contato suprimido NUNCA recebe; opt-out exclui de campanhas futuras", async () => {
@@ -572,7 +673,8 @@ suite("RLS — isolamento entre tenants", () => {
 
     // conversa + mensagem inbound registradas
     const convs = await service`
-      SELECT * FROM public.conversations WHERE organization_id = ${orgA}
+      SELECT * FROM public.conversations
+      WHERE organization_id = ${orgA} AND channel = 'whatsapp'
     `;
     expect(convs).toHaveLength(1);
     expect(convs[0].channel).toBe("whatsapp");
@@ -613,7 +715,9 @@ suite("RLS — isolamento entre tenants", () => {
     expect(sup[0].reason).toBe("optout_keyword");
 
     const [optedLead] = await service`
-      SELECT opted_out_at FROM public.leads WHERE organization_id = ${orgA}
+      SELECT l.opted_out_at FROM public.leads l
+      JOIN public.contacts c ON c.id = l.contact_id
+      WHERE l.organization_id = ${orgA} AND c.phone_normalized = '5511900000001'
     `;
     expect(optedLead.opted_out_at).not.toBeNull();
 
@@ -679,8 +783,9 @@ suite("RLS — isolamento entre tenants", () => {
 
     // leads com score (denormalizado) e com base legal de legítimo interesse
     const leadsRows = (await service`
-      SELECT score, legal_basis FROM public.leads
-      WHERE organization_id = ${orgA} AND company_id IS NOT NULL
+      SELECT l.score, l.legal_basis FROM public.leads l
+      JOIN public.companies c ON c.id = l.company_id
+      WHERE l.organization_id = ${orgA} AND c.external_id IS NOT NULL
     `) as unknown as Array<{ score: number | null; legal_basis: string | null }>;
     expect(leadsRows).toHaveLength(20);
     expect(leadsRows.every((row) => row.legal_basis === "legitimate_interest")).toBe(true);
@@ -705,9 +810,10 @@ suite("RLS — isolamento entre tenants", () => {
     expect(report2.leadsExisting).toBe(20);
 
     const totalLeads = await service`
-      SELECT count(*)::int AS total FROM public.leads
-      WHERE organization_id = ${orgA} AND company_id IS NOT NULL
+      SELECT count(*)::int AS total FROM public.leads l
+      JOIN public.companies c ON c.id = l.company_id
+      WHERE l.organization_id = ${orgA} AND c.external_id IS NOT NULL
     `;
     expect(totalLeads[0].total).toBe(20);
-  });
+  }, 60_000);
 });

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { drizzle, type PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
 import * as schema from "./schema";
@@ -13,7 +13,7 @@ import * as schema from "./schema";
  * que roda sob RLS com as claims do usuário autenticado.
  */
 
-export type ServiceDb = NodePgDatabase<typeof schema>;
+export type ServiceDb = PostgresJsDatabase<typeof schema>;
 
 let serviceDb: ServiceDb | null = null;
 

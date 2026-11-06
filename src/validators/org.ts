@@ -13,23 +13,36 @@ export const createOrganizationSchema = z.object({
     .max(80, "O nome deve ter no máximo 80 caracteres"),
 });
 
+/**
+ * Schema das settings da org.
+ *
+ * ⚠️ Todos os campos têm DEFAULT: as settings são gravadas como JSONB e
+ * podem ter sido criadas por uma versão anterior (sem um campo novo) ou
+ * atualizadas parcialmente. Sem defaults, o safeParse falhava e o
+ * `parseOrgSettings` trocava a configuração INTEIRA da org pelo default —
+ * apagando silenciosamente a alocação da meta, os pesos de score, etc.
+ * Com defaults, o que falta é preenchido e o que existe é preservado.
+ */
 export const orgSettingsSchema = z.object({
-  businessMode: z.enum(["affiliate", "own", "both"]).nullable(),
-  categories: z.array(z.string().min(1).max(48)).max(12),
-  channels: z.object({
-    email: z.boolean(),
-    whatsapp: z.boolean(),
-  }),
+  businessMode: z.enum(["affiliate", "own", "both"]).nullable().default(null),
+  categories: z.array(z.string().min(1).max(48)).max(12).default([]),
+  channels: z
+    .object({
+      email: z.boolean().default(false),
+      whatsapp: z.boolean().default(false),
+    })
+    .default({ email: false, whatsapp: false }),
   dream: z
     .object({
       name: z.string().trim().min(2).max(120),
-      amount: z.number().positive().nullable(),
-      imageUrl: z.string().url().nullable().or(z.literal("")).nullable(),
-      productUrl: z.string().url().nullable().or(z.literal("")).nullable(),
+      amount: z.number().positive().nullable().default(null),
+      imageUrl: z.string().url().nullable().or(z.literal("")).nullable().default(null),
+      productUrl: z.string().url().nullable().or(z.literal("")).nullable().default(null),
     })
-    .nullable(),
-  dreamSkipped: z.boolean(),
-  onboardedAt: z.string().datetime().nullable(),
+    .nullable()
+    .default(null),
+  dreamSkipped: z.boolean().default(false),
+  onboardedAt: z.string().datetime().nullable().default(null),
   scoreWeights: z.record(z.string(), z.number()).default({}),
   goalSettings: z
     .object({

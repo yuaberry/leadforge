@@ -1,7 +1,7 @@
 import "server-only";
 
 import { and, count, desc, eq, sql } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import {
   capturePages,
@@ -10,7 +10,7 @@ import {
 } from "@/server/db/schema";
 import * as schema from "@/server/db/schema";
 
-type AnyDb = NodePgDatabase<typeof schema>;
+type AnyDb = PostgresJsDatabase<typeof schema>;
 
 // ---------- CRUD (org autenticada) ----------
 

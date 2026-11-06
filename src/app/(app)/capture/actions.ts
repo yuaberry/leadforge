@@ -13,12 +13,9 @@ import {
   setCapturePageStatusSchema,
   updateCapturePageSchema,
 } from "@/validators/capture";
+import { isUniqueViolation } from "@/server/db/errors";
 
 type CaptureState = { error?: string; success?: string } | null;
-
-function isUniqueViolation(erro: unknown): boolean {
-  return (erro as { code?: string }).code === "23505";
-}
 
 export async function createCapturePageAction(
   _prev: CaptureState,

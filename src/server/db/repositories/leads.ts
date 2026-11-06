@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, ilike, inArray, or, sql, type SQL } from "drizzle-orm";
 
 import { companyDedupKeys, normalizeCompany, normalizeContact, type NormalizedCompany } from "@/server/services/normalization";
 import { computeLeadScore, signalsFromRawInput } from "@/server/services/scoring";
@@ -72,27 +72,40 @@ export async function getOrCreateSource(
 
 // ---------- Companies (dedup) ----------
 
-/** Busca empresa existente pelas 4 chaves de dedup (dentro da org). */
+/** Busca empresa existente pelas chaves de dedup (dentro da org). */
 export async function findCompanyByDedupKeys(
   db: TenantDb,
   organizationId: string,
   normalized: NormalizedCompany
 ): Promise<typeof companies.$inferSelect | null> {
   const keys = companyDedupKeys(normalized);
-  const conditions = [eq(companies.organizationId, organizationId)];
 
-  if (keys.domain) conditions.push(eq(companies.domain, keys.domain));
-  if (keys.phoneNormalized) conditions.push(eq(companies.phoneNormalized, keys.phoneNormalized));
-  if (keys.emailNormalized) conditions.push(eq(companies.emailNormalized, keys.emailNormalized));
-  if (keys.nameAddressHash) conditions.push(eq(companies.nameAddressHash, keys.nameAddressHash));
-  if (keys.externalId) conditions.push(eq(companies.externalId, keys.externalId));
+  // Chaves FORTES — identificam a empresa com precisão (place_id, domínio,
+  // telefone, e-mail). Quando alguma existe, o casamento é por elas.
+  const strongKeys: SQL[] = [];
+  if (keys.externalId) strongKeys.push(eq(companies.externalId, keys.externalId));
+  if (keys.domain) strongKeys.push(eq(companies.domain, keys.domain));
+  if (keys.phoneNormalized) strongKeys.push(eq(companies.phoneNormalized, keys.phoneNormalized));
+  if (keys.emailNormalized) strongKeys.push(eq(companies.emailNormalized, keys.emailNormalized));
 
-  if (conditions.length === 1) return null; // nenhuma chave disponível
+  // Chave FRACA — nome + cidade + estado. Só entra sozinha quando não há
+  // chave forte; caso contrário, duas empresas homônimas (ex.: duas
+  // "Clínica Vida" na mesma cidade, com place_id e telefones diferentes)
+  // seriam fundidas por engano.
+  const weakKeys: SQL[] = [];
+  if (keys.nameAddressHash) weakKeys.push(eq(companies.nameAddressHash, keys.nameAddressHash));
 
+  const keyConditions = strongKeys.length > 0 ? strongKeys : weakKeys;
+  if (keyConditions.length === 0) return null; // nenhuma chave disponível
+
+  // ⚠️ A organização entra com AND — as chaves de dedup são alternativas (OR).
+  //    Juntar tudo com OR faria QUALQUER empresa da org "casar" com a busca
+  //    (o filtro da org sozinho já satisfaz a condição) e o dedup nunca criaria
+  //    uma empresa nova — apenas sobrescreveria a última atualizada.
   const [existing] = await db
     .select()
     .from(companies)
-    .where(or(...conditions))
+    .where(and(eq(companies.organizationId, organizationId), or(...keyConditions)))
     .orderBy(desc(companies.updatedAt))
     .limit(1);
   return existing ?? null;

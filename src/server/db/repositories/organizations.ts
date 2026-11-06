@@ -13,12 +13,9 @@ import {
   users,
 } from "@/server/db/schema";
 import type { TenantDb } from "@/server/db/tenant";
+import { isUniqueViolation } from "@/server/db/errors";
 
 // ---------- Organizations ----------
-
-function isUniqueViolation(erro: unknown): boolean {
-  return (erro as { code?: string }).code === "23505";
-}
 
 /**
  * Cria a organização com slug único (retry com sufixo em colisão).

@@ -84,16 +84,28 @@ export function normalizeWebsite(
   }
 }
 
-/** Hash sha256 de nome normalizado + cidade + estado (chave de dedup 5). */
+/**
+ * Hash sha256 de nome normalizado + cidade + estado + endereço (chave de dedup).
+ *
+ * O endereço entra na chave porque duas empresas homônimas na mesma cidade
+ * ("Clínica Vida" na Rua A e na Rua B) são negócios diferentes — sem a rua,
+ * a chave colidiria e o índice único impediria a segunda de ser criada.
+ * Quando não há endereço informado, a chave é nome + cidade + estado.
+ */
 export function companyNameAddressHash(
   name: string | null,
   city: string | null,
-  state: string | null
+  state: string | null,
+  addressLine?: string | null
 ): string | null {
   const normName = trimOrNull(name);
   if (!normName) return null;
-  const key = [normName.toLowerCase(), (city ?? "").trim().toLowerCase(), (state ?? "").trim().toLowerCase()]
-    .join("|");
+  const key = [
+    normName.toLowerCase(),
+    (city ?? "").trim().toLowerCase(),
+    (state ?? "").trim().toLowerCase(),
+    (trimOrNull(addressLine) ?? "").trim().toLowerCase(),
+  ].join("|");
   return createHash("sha256").update(key).digest("hex");
 }
 
@@ -106,6 +118,7 @@ export function normalizeCompany(input: CompanyInput): NormalizedCompany {
   const emailNormalized = email && isValidEmail(email) ? normalizeEmail(email) : null;
   const city = trimOrNull(input.city);
   const state = trimOrNull(input.state);
+  const addressLine = trimOrNull(input.addressLine);
 
   return {
     name,
@@ -120,12 +133,12 @@ export function normalizeCompany(input: CompanyInput): NormalizedCompany {
     instagram: trimOrNull(input.instagram),
     facebook: trimOrNull(input.facebook),
     linkedin: trimOrNull(input.linkedin),
-    addressLine: trimOrNull(input.addressLine),
+    addressLine,
     city,
     state,
     country: trimOrNull(input.country),
     externalId: trimOrNull(input.externalId),
-    nameAddressHash: companyNameAddressHash(name, city, state),
+    nameAddressHash: companyNameAddressHash(name, city, state, addressLine),
     rating:
       typeof input.rating === "number" && Number.isFinite(input.rating) && input.rating > 0
         ? Math.round(input.rating * 10) / 10

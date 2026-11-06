@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 
 import * as schema from "@/server/db/schema";
 import { contacts, leads } from "@/server/db/schema";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { normalizePhoneBR } from "@/lib/format";
 import { addSuppression } from "@/server/db/repositories/campaigns";
@@ -14,7 +14,7 @@ import { getWhatsAppProvider } from "@/server/providers/whatsapp";
 import { isOptOutMessage, optOutConfirmationMessage } from "@/server/services/optout";
 import type { ParsedWhatsAppWebhook } from "@/server/services/whatsapp-webhook";
 
-type AnyDb = NodePgDatabase<typeof schema>;
+type AnyDb = PostgresJsDatabase<typeof schema>;
 
 export type WhatsAppWebhookReport = {
   inboundMessages: number;

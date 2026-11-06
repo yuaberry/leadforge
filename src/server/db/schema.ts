@@ -82,6 +82,8 @@ export const organizations = pgTable(
     slug: text("slug").notNull(),
     plan: orgPlanEnum("plan").default("starter").notNull(),
     settings: jsonb("settings").$type<OrgSettings>().default(DEFAULT_ORG_SETTINGS).notNull(),
+    /** Autor da org — preenchido por trigger (BEFORE INSERT). */
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "string" })
       .defaultNow()
       .notNull(),
@@ -89,7 +91,10 @@ export const organizations = pgTable(
       .defaultNow()
       .notNull(),
   },
-  (table) => [uniqueIndex("organizations_slug_unique").on(table.slug)]
+  (table) => [
+    uniqueIndex("organizations_slug_unique").on(table.slug),
+    index("organizations_created_by_idx").on(table.createdBy),
+  ]
 );
 
 export const organizationMembers = pgTable(

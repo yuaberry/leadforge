@@ -4,7 +4,7 @@ import { and, asc, eq, lte, or } from "drizzle-orm";
 
 import * as schema from "@/server/db/schema";
 import { campaigns, campaignLeads, campaignSteps, contacts, leads } from "@/server/db/schema";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import { getEmailProvider } from "@/server/providers/email";
 import { appendEmailFooter, renderTemplate } from "@/server/services/template";
@@ -16,7 +16,7 @@ import { recordConversationMessage } from "@/server/db/repositories/inbox";
 import { recordActivity } from "@/server/db/repositories/leads";
 import { products } from "@/server/db/schema";
 
-type AnyDb = NodePgDatabase<typeof schema>;
+type AnyDb = PostgresJsDatabase<typeof schema>;
 
 export type CampaignRunReport = {
   processed: number;

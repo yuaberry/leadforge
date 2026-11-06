@@ -1,8 +1,8 @@
 import "server-only";
 
-import { and, count, desc, eq, sql } from "drizzle-orm";
+import { and, count, desc, eq, inArray, sql } from "drizzle-orm";
 import { and as drizzleAnd, eq as drizzleEq } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as schema from "@/server/db/schema";
 import {
@@ -11,23 +11,50 @@ import {
   sales,
 } from "@/server/db/schema";
 
-type AnyDb = NodePgDatabase<typeof schema>;
+type AnyDb = PostgresJsDatabase<typeof schema>;
 
 // ---------- Products ----------
 
+/**
+ * Lista os produtos com o contador de vendas pagas.
+ *
+ * ⚠️ O contador vem de query separada: em `sql` cru o Drizzle renderiza a
+ *    coluna SEM a tabela, e "id" dentro da subquery resolvia para sales.id —
+ *    o contador saía sempre 0.
+ */
 export async function listProducts(db: AnyDb, organizationId: string) {
-  const rows = await db
-    .select({
-      product: products,
-      salesCount: sql<number>`(
-        select count(*) from ${sales}
-        where ${sales.productId} = ${products.id} and ${sales.status} = 'paid'
-      )`.mapWith(Number),
-    })
+  const productRows = await db
+    .select()
     .from(products)
     .where(eq(products.organizationId, organizationId))
     .orderBy(desc(products.updatedAt));
-  return rows;
+
+  if (productRows.length === 0) return [];
+
+  const salesCounts = await db
+    .select({
+      productId: sales.productId,
+      total: sql<number>`count(*)`.mapWith(Number),
+    })
+    .from(sales)
+    .where(
+      and(
+        eq(sales.organizationId, organizationId),
+        inArray(
+          sales.productId,
+          productRows.map((product) => product.id)
+        ),
+        eq(sales.status, "paid")
+      )
+    )
+    .groupBy(sales.productId);
+
+  const countByProduct = new Map(salesCounts.map((row) => [row.productId, Number(row.total)]));
+
+  return productRows.map((product) => ({
+    product,
+    salesCount: countByProduct.get(product.id) ?? 0,
+  }));
 }
 
 export async function getProduct(db: AnyDb, organizationId: string, productId: string) {

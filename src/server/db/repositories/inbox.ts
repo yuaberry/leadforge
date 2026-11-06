@@ -1,13 +1,13 @@
 import "server-only";
 
 import { and, asc, desc, eq, sql } from "drizzle-orm";
-import type { NodePgDatabase } from "drizzle-orm/node-postgres";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
 import * as schema from "@/server/db/schema";
 import { conversationMessages, conversations, whatsappAccounts } from "@/server/db/schema";
 import type { TenantDb } from "@/server/db/tenant";
 
-type AnyDb = NodePgDatabase<typeof schema>;
+type AnyDb = PostgresJsDatabase<typeof schema>;
 
 // ---------- Conversas ----------
 
