@@ -52,3 +52,38 @@ entrypoint).
 - [ ] Domínio verificado na Resend + `from` da org configurado
 - [ ] `WHATSAPP_VERIFY_TOKEN` igual ao cadastrado na Meta
 - [ ] CI verde no repositório (typecheck/lint/test/build/smoke/scan)
+
+---
+
+## App Desktop (Windows / Linux / macOS)
+
+O LeadForge tem um cliente desktop autocontido (Electron) que empacota o
+servidor Next.js dentro do instalador — o usuário não precisa de Node, Bun
+ou clonar o projeto. Basta instalar e informar a URL/chave do Supabase no
+primeiro uso.
+
+### Baixar
+
+Releases com todos os instaladores:
+https://github.com/yuaberry/leadforge/releases
+
+| Sistema | Arquivo |
+|---|---|
+| Linux | `LeadForge-1.1.0.AppImage` ou `leadforge-desktop_1.1.0_amd64.deb` |
+| Windows | `LeadForge Setup 1.1.0.exe` (ou `.zip` portável) |
+| macOS | `LeadForge-1.1.0.dmg` (via CI na tag `v*`) |
+
+### Primeira execução
+
+1. Instale o pacote do seu SO.
+2. Abra o LeadForge. Na primeira execução, aparece o wizard "Configurar".
+3. Escolha **Servidor local** (roda o LeadForge no seu computador) ou
+   **Servidor remoto** (conecta a uma instância hospedada).
+4. No modo local, informe: URL do Supabase, chave anônima e DATABASE_URL
+   (Project Settings → API e Database no painel Supabase).
+5. Clique em "Iniciar LeadForge" — o servidor embutido sobe na porta 4210
+   e a janela principal abre automaticamente.
+
+As chaves ficam salas apenas neste computador (arquivo com permissão 0600);
+nada é enviado ao Yua Devs. As migrations do banco devem estar aplicadas —
+veja a seção VPS/Docker acima para aplicar as migrations.
